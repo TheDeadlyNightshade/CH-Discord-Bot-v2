@@ -120,14 +120,15 @@ boss_timers = {
     "!erb": {"timer": 12960, "window": 2880, "type": "Ring Boss"},
     "!srb": {"timer": 12960, "window": 2880, "type": "Ring Boss"},
     "!aggy": {"timer": 114048, "window": 114018, "type": "World Boss"},
-    "!prot": {"timer": 71700, "window": 600, "type": "World Boss"},
-    "!gele": {"timer": 172800, "window": 172800, "type": "World Boss"},
-    "!dino": {"timer": 172800, "window": 172800, "type": "World Boss"},
+    "!prot": {"timer": 64800, "window": 900, "type": "World Boss"},
+    "!gele": {"timer": 115200, "window": 100800, "type": "World Boss"},
+    "!dino": {"timer": 122400, "window": 100800, "type": "World Boss"},
     "!lich": {"timer": 7200, "window": 7200, "type": "World Boss"},
     "!reaver": {"timer": 7200, "window": 7200, "type": "World Boss"},
-    "!bt": {"timer": 172800, "window": 172800, "type": "World Boss"},
-    "!hrung": {"timer": 129600, "window": 259200, "type": "World Boss"},
-    "!necro": {"timer": 129600, "window": 259200, "type": "World Boss"}
+    "!bt": {"timer": 122400, "window": 100800, "type": "World Boss"},
+    "!hrung": {"timer": 79200, "window": 57600, "type": "World Boss"},
+    "!mord": {"timer": 72000, "window": 57600, "type": "World Boss"},
+    "!necro": {"timer": 79200, "window": 57600, "type": "World Boss"}
 
 }
 
@@ -2536,4 +2537,4 @@ async def help_command(ctx, command: str = None):
 
 
 # Start the bot using your bot token
-bot.run('put token here')
+bot.run('Put Bot Token Here')
