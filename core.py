@@ -22,7 +22,7 @@ bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 @bot.event
 async def on_ready():
     # Set the bot's status
-    await bot.change_presence(activity=discord.Game(name="Made by Notbetaorbiter / Nightshade / Pie123"))
+    #await bot.change_presence(activity=discord.Game(name=" | Made by Notbetaorbiter / Nightshade / Pie123"))
     global decay_active  # Declare the global variable here
     print(f'Bot is ready and logged in as {bot.user}')
 
@@ -4659,4 +4659,4 @@ async def help_command(ctx, command: str = None):
 
 
 # Start the bot using your bot token
-bot.run('put bot token here')
+bot.run('PUT TOKEN HERE')
