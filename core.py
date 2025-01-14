@@ -787,7 +787,9 @@ async def create_config_csv(guild):
         ["role_req_bal", "false"],
         ["role_req_cancel", "false"],
         ["role_req_bid", "false"],
-        ["role_req_editcommandroles", "true"]
+        ["role_req_editcommandroles", "true"],
+        ["role_req_dkpsubtractlifetime", "true"],
+        ["role_req_dkpaddcurrent", "true"]
     ]
 
     # Create an in-memory file for the CSV
@@ -1570,6 +1572,114 @@ async def dkp_add(ctx, dkp_value: int, *names: str):
     # Send confirmation to the channel where the command was issued
     await ctx.send(f"{dkp_value} DKP added to:\n" + "\n".join(updated_members))
 
+@bot.command(name="dkpaddcurrent")
+async def dkp_add_current(ctx, dkp_value: int, *names: str):
+    result = await role_confirm_command(ctx, "dkpaddcurrent")
+    if result is None:
+        return
+
+    # Check if at least one member or nickname is provided
+    if len(names) == 0:
+        await ctx.send("Usage: !dkpaddcurrent <dkp_value> <user/nickname> [additional users/nicknames]")
+        return
+
+    # Fetch the DKP Database Channel
+    dkp_database_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-database")
+    if dkp_database_channel is None:
+        await ctx.send("The DKP database channel does not exist.")
+        return
+
+    # Find the "Balances_Database.csv" message in the "dkp-database" channel
+    message = await find_csv_message(dkp_database_channel, "Balances_Database.csv")
+    if message is None:
+        await ctx.send("Could not find the Balances_Database.csv file.")
+        return
+
+    # Find the "Nicknames.csv" message in the "dkp-database" channel
+    nickname_message = await find_csv_message(dkp_database_channel, "Nicknames.csv")
+    nicknames = {}
+
+    if nickname_message is not None:
+        # Download and parse the Nicknames.csv file
+        nickname_csv_file = nickname_message.attachments[0]
+        nickname_csv_data = await download_csv(nickname_csv_file)
+
+        if nickname_csv_data is not None:
+            # Create a dictionary of usernames mapped to their nicknames
+            for row in nickname_csv_data:
+                nickname_list = row[1].split(", ")
+                for nick in nickname_list:
+                    nicknames[nick.lower()] = row[0]  # Nickname -> Username mapping
+
+    # Download and parse the Balances CSV file
+    csv_file = message.attachments[0]
+    csv_data = await download_csv(csv_file)
+
+    if csv_data is None:
+        await ctx.send("Could not download or parse the Balances_Database.csv file.")
+        return
+
+    # Modify the data for each name (which could be a username, mention, or a nickname)
+    updated_members = []
+    for name in names:
+        member = None
+
+        # Check if the name is a mention
+        if name.startswith("<@") and name.endswith(">"):
+            # Extract user ID from the mention format
+            user_id = name.replace("<@", "").replace(">", "").replace("!", "")
+            member = ctx.guild.get_member(int(user_id))
+        else:
+            # If the name is not a mention, check if it's a nickname or username
+            member = discord.utils.get(ctx.guild.members, name=name)
+
+            # If no user by that name, check if it's a nickname
+            if member is None and name.lower() in nicknames:
+                real_username = nicknames[name.lower()]
+                member = discord.utils.get(ctx.guild.members, name=real_username)
+
+        if member is None:
+            await ctx.send(f"Could not find user or nickname: {name}")
+            continue
+
+        # Update DKP for the found member
+        updated = False
+        current_balance = 0
+
+        for row in csv_data:
+            if row[0] == member.name:  # Match by username
+                current_balance = int(row[1]) + dkp_value  # Add DKP to current balance
+                row[1] = str(current_balance)  # Update only the current balance in the CSV
+                updated = True
+                break
+
+        # If the user was not found in the CSV, add them
+        if not updated:
+            current_balance = dkp_value
+            csv_data.append([member.name, str(current_balance), "0"])  # Add new user with lifetime DKP as 0
+
+        updated_members.append(f"{member.display_name} - current balance: {current_balance}")
+
+    if not updated_members:
+        await ctx.send("No users were found or processed for DKP addition.")
+        return  # Exit if no members were successfully processed
+
+    # Create a new CSV file with the updated data
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerows(csv_data)
+    output.seek(0)
+
+    # Send the updated CSV to the "dkp-database" channel
+    new_csv_file = discord.File(io.BytesIO(output.getvalue().encode()), filename="Balances_Database.csv")
+    await dkp_database_channel.send(file=new_csv_file)
+
+    # Delete the original message containing the old CSV
+    await message.delete()
+
+    # Send confirmation to the channel where the command was issued
+    await ctx.send(f"{dkp_value} DKP added to current balances of:\n" + "\n".join(updated_members))
+
 # Removes DKP from just current, good for things like auctions
 @bot.command(name="dkpsubtract")
 async def dkp_subtract(ctx, dkp_value: int, *names: str):
@@ -1678,6 +1788,113 @@ async def dkp_subtract(ctx, dkp_value: int, *names: str):
 
     # Send confirmation to the channel where the command was issued
     await ctx.send(f"{dkp_value} DKP deducted from:\n" + "\n".join(updated_members))
+
+@bot.command(name="dkpsubtractlifetime")
+async def dkp_subtract_lifetime(ctx, dkp_value: int, *names: str):
+    result = await role_confirm_command(ctx, "dkpsubtractlifetime")
+    if result is None:
+        return
+
+    # Check if at least one member or nickname is provided
+    if len(names) == 0:
+        await ctx.send("Usage: !dkpsubtractlifetime <dkp_value> <user/nickname> [additional users/nicknames]")
+        return
+
+    # Fetch the DKP Database Channel
+    dkp_database_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-database")
+    if dkp_database_channel is None:
+        await ctx.send("The DKP database channel does not exist.")
+        return
+
+    # Find the "Balances_Database.csv" message in the "dkp-database" channel
+    message = await find_csv_message(dkp_database_channel, "Balances_Database.csv")
+    if message is None:
+        await ctx.send("Could not find the Balances_Database.csv file.")
+        return
+
+    # Find the "Nicknames.csv" message in the "dkp-database" channel
+    nickname_message = await find_csv_message(dkp_database_channel, "Nicknames.csv")
+    nicknames = {}
+
+    if nickname_message is not None:
+        # Download and parse the Nicknames.csv file
+        nickname_csv_file = nickname_message.attachments[0]
+        nickname_csv_data = await download_csv(nickname_csv_file)
+
+        if nickname_csv_data is not None:
+            # Create a dictionary of usernames mapped to their nicknames
+            for row in nickname_csv_data:
+                nickname_list = row[1].split(", ")
+                for nick in nickname_list:
+                    nicknames[nick.lower()] = row[0]  # Nickname -> Username mapping
+
+    # Download and parse the Balances CSV file
+    csv_file = message.attachments[0]
+    csv_data = await download_csv(csv_file)
+
+    if csv_data is None:
+        await ctx.send("Could not download or parse the Balances_Database.csv file.")
+        return
+
+    # Modify the data for each name (which could be a username, mention, or a nickname)
+    updated_members = []
+    for name in names:
+        member = None
+
+        # Check if the name is a mention
+        if name.startswith("<@") and name.endswith(">"):
+            # Extract user ID from the mention format
+            user_id = name.replace("<@", "").replace(">", "").replace("!", "")
+            member = ctx.guild.get_member(int(user_id))
+        else:
+            # If the name is not a mention, check if it's a nickname or username
+            member = discord.utils.get(ctx.guild.members, name=name)
+
+            # If no user by that name, check if it's a nickname
+            if member is None and name.lower() in nicknames:
+                real_username = nicknames[name.lower()]
+                member = discord.utils.get(ctx.guild.members, name=real_username)
+
+        if member is None:
+            await ctx.send(f"Could not find user or nickname: {name}")
+            continue
+
+        # Update DKP for the found member
+        updated = False
+        lifetime_balance = 0
+
+        for row in csv_data:
+            if row[0] == member.name:  # Match by username
+                lifetime_balance = max(0, int(row[2]) - dkp_value)  # Subtract DKP from lifetime balance, ensure it doesn't go negative
+                row[2] = str(lifetime_balance)  # Update only the lifetime balance in the CSV
+                updated = True
+                break
+
+        if not updated:
+            await ctx.send(f"User {member.name} not found in the CSV.")
+            return
+
+        updated_members.append(f"{member.display_name} - lifetime balance: {lifetime_balance}")
+
+    if not updated_members:
+        await ctx.send("No users were found or processed for DKP deduction.")
+        return  # Exit if no members were successfully processed
+
+    # Create a new CSV file with the updated data
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerows(csv_data)
+    output.seek(0)
+
+    # Send the updated CSV to the "dkp-database" channel
+    new_csv_file = discord.File(io.BytesIO(output.getvalue().encode()), filename="Balances_Database.csv")
+    await dkp_database_channel.send(file=new_csv_file)
+
+    # Delete the original message containing the old CSV
+    await message.delete()
+
+    # Send confirmation to the channel where the command was issued
+    await ctx.send(f"{dkp_value} DKP deducted from lifetime balances of:\n" + "\n".join(updated_members))
 
 # Removes DKP from both current and lifetime
 @bot.command(name="dkpsubtractboth")
@@ -4764,6 +4981,17 @@ By default this command requires the DKP Keeper role to use.""",
 This command allows for any command to be toggled between needing the DKP Keeper role or not. True means the command requires the DKP Keeper role, False means the command can be used by anyone.
 
 By default this command requires the DKP Keeper role to use.""",
+    'dkpsubtractlifetime': """Usage: !dkpsubtractlifetime <dkp_value> <user/nickname> [additional users/nicknames]
+Example: !dkpsubtractlifetime 5 pie @jeff (note multiple users are supported but not required)
+DKP Keepers can use this command to manually remove lifetime DKP from either a single user or a set of users defined by the user1 user2 user3 arguments. This can be used to correct / remove lifetime DKP. This will reduce lifetime DKP and have no effect on current DKP. To change both, see !dkpsubtractboth.
+Nicknames can be used for this command. See !nick for more information.
+By default this command requires the DKP Keeper role to use.""",
+    'dkpaddcurrent': """Usage: !dkpaddcurrent <dkp_value> <user/nickname> [additional users/nicknames]
+
+Example: !dkpadcurrent 10 pie jeff @eggroll (note multiple users are supported but not required)
+DKP Keepers can use this command to manually add only current DKP to either a single user or a set of users defined by the user1 user2 user3 arguments. This can be used to correct DKP values or grant awards of DKP. This will increase ONLY current DKP and have no effect on lifetime DKP.
+Nicknames can be used for this command. See !nick for more information.
+By default this command requires the DKP Keeper role to use.""",
 }
 
 @bot.command(name="help")
@@ -4816,6 +5044,8 @@ async def help_command(ctx, command: str = None):
         `restorefromconfig`
         `createbackup`
         `restorefrombackup`
+        `dkpaddcurrent`
+        `dkpsubtractlifetime`
         """
         await ctx.send(help_message)
     else:
