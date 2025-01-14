@@ -750,7 +750,44 @@ async def create_config_csv(guild):
         ["edl_emoji", "🤖"],
         ["legacy_emoji", "🦵"],
         ["worldboss_emoji", "👹"],
-        ["ringboss_emoji", "💍"]
+        ["ringboss_emoji", "💍"],
+        ["role_req_toggledkpchannel", "true"],
+        ["role_req_a", "true"],
+        ["role_req_k", "false"],
+        ["role_req_nick", "true"],
+        ["role_req_dkpadd", "true"],
+        ["role_req_dkpsubtract", "true"],
+        ["role_req_dkpsubtractboth", "true"],
+        ["role_req_setdkp", "true"],
+        ["role_req_togglewindows", "true"],
+        ["role_req_toggletimers", "true"],
+        ["role_req_toggle", "true"],
+        ["role_req_toggle_role", "true"],
+        ["role_req_restorefromconfig", "true"],
+        ["role_req_createbackup", "true"],
+        ["role_req_restorefrombackup", "true"],
+        ["role_req_togglerolechannel", "true"],
+        ["role_req_toggledecay", "true"],
+        ["role_req_setdecaypercent", "true"],
+        ["role_req_setdecaytimeframe", "true"],
+        ["role_req_bossadd", "true"],
+        ["role_req_bossdelete", "true"],
+        ["role_req_timeradd", "true"],
+        ["role_req_timerdelete", "true"],
+        ["role_req_timeredit", "true"],
+        ["role_req_nickdelete", "true"],
+        ["role_req_auction", "true"],
+        ["role_req_auctionend", "true"],
+        ["role_req_auctioncancel", "true"],
+        ["role_req_setauctionduration", "true"],
+        ["role_req_backup", "true"],
+        ["role_req_assign", "true"],
+        ["role_req_help", "false"],
+        ["role_req_generatebalances", "false"],
+        ["role_req_bal", "false"],
+        ["role_req_cancel", "false"],
+        ["role_req_bid", "false"],
+        ["role_req_editcommandroles", "true"]
     ]
 
     # Create an in-memory file for the CSV
@@ -870,6 +907,15 @@ async def on_message(message):
     if message.author == bot.user:
         return  # Ignore messages sent by the bot itself
 
+    # Check if the message is in a DM
+    if message.guild is None:
+        # Process DM-specific commands
+        if message.content.lower().startswith("!help"):
+            # Directly call the help_command in a DM context
+            ctx = await bot.get_context(message)
+            await bot.invoke(ctx)
+        return  # Exit after handling DM
+
     # Load the valid commands from the CSV file dynamically
     valid_commands = await load_valid_commands()
 
@@ -879,8 +925,15 @@ async def on_message(message):
     # Check if the message starts with either !k or !a followed by a valid boss command
     if message.content.lower().startswith("!k") or message.content.lower().startswith("!a"):
         # Extract the boss command part (e.g., "155/4" in "!k155/4")
-        boss_command = message.content[2:].split(" ")[0].lower()  # Strip the prefix and extract boss part
+        command_prefix = message.content[1].lower()  # 'k' or 'a'
+        command_name = "k" if command_prefix == "k" else "a"
 
+        # Confirm if the user has the required role for the command
+        result = await role_confirm_command(message, command_name)
+        if result is None:
+            return  # Exit if the user doesn't have the required role
+
+        boss_command = message.content[2:].split(" ")[0].lower()  # Strip the prefix and extract boss part
         #print(f"Extracted boss command: {boss_command}")
 
         if f"!k{boss_command}" in valid_commands or f"!a{boss_command}" in valid_commands:
@@ -1128,8 +1181,12 @@ async def on_raw_reaction_remove(payload):
             await log_channel.send(f"{member.display_name} has revoked attendance to {boss_name} and lost {dkp_value} DKP.")
 
 @bot.command(name="createbackup")
-@commands.has_role("DKP Keeper")  # Restrict the command to users with the "DKP Keeper" role
 async def create_backup(ctx):
+
+    result = await role_confirm_command(ctx,"createbackup")
+    if result is None:
+        return
+
     # Fetch the DKP Database Channel
     dkp_database_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-database")
     if dkp_database_channel is None:
@@ -1173,15 +1230,13 @@ async def create_backup(ctx):
     # Send a confirmation message in the channel where the command was issued
     await ctx.send(f"Backup created: {backup_filename}")
 
-# Error handler for MissingRole
-@create_backup.error
-async def create_backup_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("DKP Keeper role is required to use that command.")
-
 @bot.command(name="restorebackup")
-@commands.has_role("DKP Keeper")  # Restrict the command to users with the "DKP Keeper" role
 async def restore_backup(ctx):
+
+    result = await role_confirm_command(ctx,"restorebackup")
+    if result is None:
+        return
+
     # Fetch the DKP Database Channel
     dkp_database_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-database")
     if dkp_database_channel is None:
@@ -1286,15 +1341,13 @@ async def restore_specific_backup_file(ctx, filename, file_url):
             else:
                 await ctx.send(f"Failed to download {filename}.")
 
-# Error handler for MissingRole
-@restore_backup.error
-async def role_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("DKP Keeper role is required to use this command.")
-
 @bot.command(name="backup")
-@commands.has_role("DKP Keeper")  # Ensure only DKP Keeper role can use this command
 async def restore_specific_backup(ctx, backup_number: int):
+
+    result = await role_confirm_command(ctx,"backup")
+    if result is None:
+        return
+
     # Fetch the selected backup file from the available backups
     backup_index = backup_number - 1
 
@@ -1304,15 +1357,14 @@ async def restore_specific_backup(ctx, backup_number: int):
     else:
         await ctx.send("Invalid backup selection. Please choose a valid backup number.")
 
-# Error handler for MissingRole
-@restore_specific_backup.error
-async def restore_specific_backup_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("DKP Keeper role is required to use this command.")
-
 # Command to generate and send the Balances_Database CSV
 @bot.command(name="generatebalances")
 async def generate_balances(ctx):
+
+    result = await role_confirm_command(ctx,"generatebalances")
+    if result is None:
+        return
+
     # Ensure the command is only allowed in the "dkp-database" channel
     if ctx.channel.name != "dkp-database":
         await ctx.send("This command can only be used in the #dkp-database channel.")
@@ -1358,9 +1410,59 @@ async def download_csv(attachment):
                 return list(csv.reader(io.StringIO(decoded_content)))
     return None
 
+async def role_confirm_command(ctx_or_message, command_name):
+    # Determine whether we are working with a context or message object
+    if hasattr(ctx_or_message, "send"):
+        send_method = ctx_or_message.send  # Use ctx.send for commands
+    else:
+        send_method = ctx_or_message.channel.send  # Use message.channel.send for on_message events
+
+    # If guild is None, it's a DM. Allow commands that don't require a guild context.
+    if ctx_or_message.guild is None:
+        # Allow commands like help in DMs
+        if command_name == "help":
+            return None  # Skip role checks for the help command in DMs
+        else:
+            await send_method("This command cannot be used in direct messages.")
+            return None
+
+    # Fetch the DKP Database Channel (only in guilds)
+    dkp_database_channel = discord.utils.get(ctx_or_message.guild.text_channels, name="dkp-database")
+    if dkp_database_channel is None:
+        await send_method("The DKP database channel does not exist.")
+        return None
+
+    # Find the config.csv message in the "dkp-database" channel
+    config_message = await find_csv_message(dkp_database_channel, "config.csv")
+    if config_message is None:
+        await send_method("Could not find the config.csv file.")
+        return None
+
+    # Download and parse the config.csv file
+    config_file = config_message.attachments[0]
+    config_data = await download_csv(config_file)
+    if config_data is None:
+        await send_method("Could not download or parse the config.csv file.")
+        return None
+
+    # Generate the role requirement setting dynamically
+    role_required_setting = f"role_req_{command_name}"
+    role_req = next((row[1] for row in config_data if row[0] == role_required_setting), "true")
+
+    # Check if the role is required and if the user has it
+    if role_req.lower() == "true" and "DKP Keeper" not in [role.name for role in ctx_or_message.author.roles]:
+        await send_method(f"You are missing the DKP Keeper role to use the {command_name} command.")
+        return None
+
+    # Return the parsed config data for further processing
+    return config_data, dkp_database_channel, config_message
+
 @bot.command(name="dkpadd")
-@commands.has_role("DKP Keeper")  # Restrict the command to users with the "DKP Keeper" role
 async def dkp_add(ctx, dkp_value: int, *names: str):
+    result = await role_confirm_command(ctx,"dkpadd")
+    if result is None:
+        return
+
     # Check if at least one member or nickname is provided
     if len(names) == 0:
         await ctx.send("Usage: !dkpadd <dkp_value> <user/nickname> [additional users/nicknames]")
@@ -1468,18 +1570,12 @@ async def dkp_add(ctx, dkp_value: int, *names: str):
     # Send confirmation to the channel where the command was issued
     await ctx.send(f"{dkp_value} DKP added to:\n" + "\n".join(updated_members))
 
-# Error handler for MissingRole and BadArgument
-@dkp_add.error
-async def dkp_add_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("DKP Keeper role is required to use that command.")
-    elif isinstance(error, commands.BadArgument):
-        await ctx.send("Usage: !dkpadd <dkp_value> <user/nickname> [additional users/nicknames]")
-
 # Removes DKP from just current, good for things like auctions
 @bot.command(name="dkpsubtract")
-@commands.has_role("DKP Keeper")  # Restrict the command to users with the "DKP Keeper" role
 async def dkp_subtract(ctx, dkp_value: int, *names: str):
+    result = await role_confirm_command(ctx,"dkpsubtract")
+    if result is None:
+        return
     # Check if at least one member or nickname is provided
     if len(names) == 0:
         await ctx.send("Usage: !dkpsubtract <dkp_value> <user/nickname> [additional users/nicknames]")
@@ -1583,18 +1679,14 @@ async def dkp_subtract(ctx, dkp_value: int, *names: str):
     # Send confirmation to the channel where the command was issued
     await ctx.send(f"{dkp_value} DKP deducted from:\n" + "\n".join(updated_members))
 
-# Error handler for MissingRole and BadArgument
-@dkp_subtract.error
-async def dkp_subtract_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("DKP Keeper role is required to use that command.")
-    elif isinstance(error, commands.BadArgument):
-        await ctx.send("Usage: !dkpsubtract <dkp_value> <user/nickname> [additional users/nicknames]")
-
 # Removes DKP from both current and lifetime
 @bot.command(name="dkpsubtractboth")
-@commands.has_role("DKP Keeper")  # Restrict the command to users with the "DKP Keeper" role
 async def dkp_subtract_both(ctx, dkp_value: int, *names: str):
+
+    result = await role_confirm_command(ctx,"dkpadd")
+    if result is None:
+        return
+
     # Check if at least one member or nickname is provided
     if len(names) == 0:
         await ctx.send("Usage: !dkpsubtractboth <dkp_value> <user/nickname> [additional users/nicknames]")
@@ -1699,17 +1791,13 @@ async def dkp_subtract_both(ctx, dkp_value: int, *names: str):
     # Send confirmation to the channel where the command was issued
     await ctx.send(f"{dkp_value} DKP deducted from:\n" + "\n".join(updated_members))
 
-# Error handler for MissingRole and BadArgument
-@dkp_subtract_both.error
-async def dkp_subtract_both_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("DKP Keeper role is required to use that command.")
-    elif isinstance(error, commands.BadArgument):
-        await ctx.send("Usage: !dkpsubtractboth <dkp_value> <user/nickname> [additional users/nicknames]")
-
-
 @bot.command(name="bal")
 async def check_balance(ctx, name: str = None):
+
+    result = await role_confirm_command(ctx,"bal")
+    if result is None:
+        return
+
     # If no name is provided, default to the user who invoked the command
     if name is None:
         member = ctx.author
@@ -1816,8 +1904,12 @@ async def check_balance_error(ctx, error):
 
 # Command to set the DKP value, restricted to "DKP Keeper" role
 @bot.command(name="setdkp")
-@commands.has_role("DKP Keeper")
 async def set_dkp_value(ctx, boss: str, dkp_value: int):
+
+    result = await role_confirm_command(ctx,"setdkp")
+    if result is None:
+        return
+
     # Fetch the DKP Database Channel
     dkp_database_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-database")
     if dkp_database_channel is None:
@@ -1868,16 +1960,13 @@ async def set_dkp_value(ctx, boss: str, dkp_value: int):
     # Call the function to update the DKP values embed
     await send_dkp_values_embed(ctx.guild)
 
-# Error handler for MissingRole
-@set_dkp_value.error
-async def set_dkp_value_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("DKP Keeper role is required to use that command.")
-
-
 @bot.command(name="nick")
-@commands.has_role("DKP Keeper")  # Restrict the command to users with the "DKP Keeper" role
 async def set_nickname(ctx, member: discord.Member, nickname: str):
+
+    result = await role_confirm_command(ctx,"nick")
+    if result is None:
+        return
+
     # Fetch the DKP Database Channel
     dkp_database_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-database")
     if dkp_database_channel is None:
@@ -1952,15 +2041,13 @@ async def set_nickname(ctx, member: discord.Member, nickname: str):
     else:
         await ctx.send(f"Nickname '{nickname}' was already set for {member.display_name}.")
 
-# Error handler for MissingRole
-@set_nickname.error
-async def set_nickname_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("DKP Keeper role is required to use that command.")
-
 @bot.command(name="nickdelete")
-@commands.has_role("DKP Keeper")  # Restrict the command to users with the "DKP Keeper" role
 async def delete_nickname(ctx, member: discord.Member, nickname: str):
+
+    result = await role_confirm_command(ctx,"nickdelete")
+    if result is None:
+        return
+
     # Fetch the DKP Database Channel
     dkp_database_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-database")
     if dkp_database_channel is None:
@@ -2014,26 +2101,15 @@ async def delete_nickname(ctx, member: discord.Member, nickname: str):
     # Send confirmation to the channel where the command was issued
     await ctx.send(f"Nickname '{nickname}' has been deleted for {member.display_name}.")
 
-# Error handler for MissingRole
-@delete_nickname.error
-async def delete_nickname_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("DKP Keeper role is required to use the !nickdelete command.")
-    elif isinstance(error, commands.BadArgument):
-        await ctx.send("Invalid argument. Usage: `!nickdelete user nickname`.")
-    else:
-        await ctx.send("An unexpected error occurred while deleting the nickname.")
-
-
 async def handle_attendance_command(message):
     # Load valid commands dynamically from the Boss_DKP_Values.csv
     valid_commands = await load_valid_commands()
 
     # Check if the user has the DKP Keeper role
-    role = discord.utils.get(message.author.roles, name="DKP Keeper")
-    if role is None:
-        await message.channel.send("You need the DKP Keeper role to use this command.")
-        return
+    #role = discord.utils.get(message.author.roles, name="DKP Keeper")
+    #if role is None:
+    #    await message.channel.send("You need the DKP Keeper role to use this command.")
+    #    return
 
     # Extract the boss command and users from message content
     parts = message.content.split(" ")
@@ -2161,8 +2237,12 @@ async def handle_attendance_command(message):
 #timer shit
 
 @bot.command(name="togglewindows")
-@commands.has_role("DKP Keeper")  # Restrict the command to users with the "DKP Keeper" role
 async def toggle_windows(ctx):
+
+    result = await role_confirm_command(ctx,"togglewindows")
+    if result is None:
+        return
+
     # Find the "config.csv" message in the "dkp-database" channel
     dkp_database_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-database")
 
@@ -2214,15 +2294,13 @@ async def toggle_windows(ctx):
     # Send confirmation to the channel
     await ctx.send(f"togglewindows has been set to {row[1]}")
 
-# Error handler for MissingRole
-@toggle_windows.error
-async def toggle_windows_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("DKP Keeper role is required to use this command.")
-
 @bot.command(name="toggletimers")
-@commands.has_role("DKP Keeper")  # Restrict the command to users with the "DKP Keeper" role
 async def toggle_timers(ctx):
+
+    result = await role_confirm_command(ctx,"toggletimers")
+    if result is None:
+        return
+
     # Fetch the DKP Database Channel
     dkp_database_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-database")
     if dkp_database_channel is None:
@@ -2290,12 +2368,6 @@ async def toggle_timers(ctx):
     # Send confirmation to the channel
     await ctx.send(f"Active_timers has been set to {row[1]}")
 
-# Error handler for MissingRole
-@toggle_timers.error
-async def toggle_timers_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("DKP Keeper role is required to use that command.")
-
 def format_time_left(seconds_left):
     if seconds_left >= 3600:  # More than 60 minutes
         hours = seconds_left // 3600
@@ -2306,7 +2378,6 @@ def format_time_left(seconds_left):
         return f"{int(minutes)} mins"
     else:  # Less than 1 minute, show seconds
         return f"{int(seconds_left)} secs"
-
 
 # Dictionary to store active timers
 active_timers = {}
@@ -2419,6 +2490,11 @@ async def cancel_timer_logic(boss_name, guild):
 
 @bot.command(name="cancel")
 async def cancel_timer(ctx, boss_name: str):
+
+    result = await role_confirm_command(ctx,"cancel")
+    if result is None:
+        return
+
     # Add a prefix to match the format used in the dictionary (e.g., !155)
     # Convert the boss_name to lowercase to make the command case-insensitive
     boss_command = f"!{boss_name.lower()}"
@@ -2755,8 +2831,12 @@ async def update_timers_embed_if_active(guild):
 
 # timer role channel bullshit
 @bot.command(name="toggle")
-@commands.has_role("DKP Keeper")  # Restrict the command to users with the "DKP Keeper" role
 async def toggle_channel(ctx, channel_name: str):
+
+    result = await role_confirm_command(ctx,"toggle")
+    if result is None:
+        return
+
     # Fetch the DKP Database Channel
     dkp_database_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-database")
     if dkp_database_channel is None:
@@ -2848,15 +2928,13 @@ async def toggle_channel(ctx, channel_name: str):
 
     await ctx.send(f"Config updated for {channel_full_name}.")
 
-# Error handler for MissingRole
-@toggle_channel.error
-async def toggle_channel_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("DKP Keeper role is required to use this command.")
-
 @bot.command(name="toggle_role")
-@commands.has_role("DKP Keeper")  # Restrict the command to users with the "DKP Keeper" role
 async def toggle_role(ctx, role_name: str):
+
+    result = await role_confirm_command(ctx,"toggle_role")
+    if result is None:
+        return
+
     # Fetch the DKP Database Channel
     dkp_database_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-database")
     if dkp_database_channel is None:
@@ -2942,17 +3020,14 @@ async def toggle_role(ctx, role_name: str):
     if role_channel:
         await generate_role_embed(ctx.guild, role_channel, csv_data)
 
-# Error handler for MissingRole
-@toggle_role.error
-async def toggle_role_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("DKP Keeper role is required to use this command.")
-
-
 
 @bot.command(name="togglerolechannel")
-@commands.has_role("DKP Keeper")  # Restrict the command to users with the "DKP Keeper" role
 async def toggle_role_channel(ctx):
+
+    result = await role_confirm_command(ctx,"togglerolechannel")
+    if result is None:
+        return
+
     # Fetch the DKP Database Channel
     dkp_database_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-database")
     if dkp_database_channel is None:
@@ -3017,13 +3092,6 @@ async def toggle_role_channel(ctx):
 
     # Delete the original message containing the old CSV
     await message.delete()
-
-# Error handler for MissingRole
-@toggle_role_channel.error
-async def toggle_role_channel_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("DKP Keeper role is required to use this command.")
-
 
 async def generate_role_embed(guild, channel, csv_data):
     if not csv_data:
@@ -3155,8 +3223,12 @@ async def get_role_from_emoji(guild, emoji):
     return None
 
 @bot.command(name="assign")
-@commands.has_role("DKP Keeper")  # Restrict the command to users with the "DKP Keeper" role
 async def assign_emoji(ctx, boss_type: str, emoji: str):
+
+    result = await role_confirm_command(ctx,"assign")
+    if result is None:
+        return
+
     # Fetch the DKP Database Channel
     dkp_database_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-database")
     if dkp_database_channel is None:
@@ -3236,19 +3308,13 @@ async def assign_emoji(ctx, boss_type: str, emoji: str):
     if role_channel:
         await generate_role_embed(ctx.guild, role_channel, config_data)
 
-# Error handler for MissingRole
-@assign_emoji.error
-async def assign_emoji_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("DKP Keeper role is required to use the !assign command.")
-    elif isinstance(error, commands.BadArgument):
-        await ctx.send("Invalid argument. Usage: `!assign boss_type emoji`.")
-    else:
-        await ctx.send("An unexpected error occurred while assigning the emoji.")
-
 @bot.command(name="toggledkpchannel")
-@commands.has_role("DKP Keeper")
 async def toggledkpchannel(ctx):
+
+    result = await role_confirm_command(ctx,"toggledkpchannel")
+    if result is None:
+        return
+
     # Fetch the DKP Database Channel
     dkp_database_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-database")
     if dkp_database_channel is None:
@@ -3323,12 +3389,6 @@ async def toggledkpchannel(ctx):
         await ctx.send("The DKP Values channel has been successfully toggled on.")
     else:
         await ctx.send("The DKP Values channel has been successfully toggled off.")
-
-# Error handler for MissingRole
-@toggledkpchannel.error
-async def toggle_dkp_channel_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("DKP Keeper role is required to use that command.")
 
 
 async def send_dkp_values_embed(guild):
@@ -3416,8 +3476,12 @@ async def send_dkp_values_embed(guild):
         await dkp_vals_channel.send(embed=new_embed)
 
 @bot.command(name="setauctionduration")
-@commands.has_role("DKP Keeper")  # Restrict the command to users with the "DKP Keeper" role
 async def set_auction_duration(ctx, duration: int):
+
+    result = await role_confirm_command(ctx,"setauctionduration")
+    if result is None:
+        return
+
     # Fetch the "dkp-database" channel
     dkp_database_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-database")
 
@@ -3467,22 +3531,18 @@ async def set_auction_duration(ctx, duration: int):
     # Send confirmation to the channel
     await ctx.send(f"Auction duration has been set to {duration} hours.")
 
-# Error handler for MissingRole
-@set_auction_duration.error
-async def set_auction_duration_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("DKP Keeper role is required to use this command.")
-    elif isinstance(error, commands.BadArgument):
-        await ctx.send("Please provide a valid integer for the auction duration.")
-
 
 # Store auction data globally or in a database
 ongoing_auctions = {}
 
 
 @bot.command(name="auction")
-@commands.has_role("DKP Keeper")
 async def start_auction(ctx, *args):
+
+    result = await role_confirm_command(ctx,"auction")
+    if result is None:
+        return
+
     if len(args) == 0:
         await ctx.send("Usage: !auction {item name} {minimum bid}. Minimum bid is optional and defaults to 0.")
         return
@@ -3546,20 +3606,13 @@ async def start_auction(ctx, *args):
     bot.loop.call_later(auction_duration * 3600,
                         lambda: asyncio.ensure_future(end_auction(item_name, ctx.guild.id, ctx.channel.id)))
 
-
-# Error handling for the auction command
-@start_auction.error
-async def start_auction_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("You need the DKP Keeper role to start an auction.")
-    elif isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send("Usage: !auction {item name} {minimum bid}. Minimum bid is optional and defaults to 0.")
-    elif isinstance(error, commands.BadArgument):
-        await ctx.send("Invalid argument. Please ensure the minimum bid is a valid number.")
-
-
 @bot.command(name="bid")
 async def place_bid(ctx, *args):
+
+    result = await role_confirm_command(ctx,"bid")
+    if result is None:
+        return
+
     if len(args) < 2:
         await ctx.send("Usage: !bid {item name} {value}.")
         return
@@ -3720,8 +3773,12 @@ async def end_auction(item_name, guild_id, channel_id):
 # You would need a background task or a timer to call `end_auction` at the appropriate time
 
 @bot.command(name="auctionend")
-@commands.has_role("DKP Keeper")
 async def auction_end(ctx, *item_name_parts):
+
+    result = await role_confirm_command(ctx,"auctionend")
+    if result is None:
+        return
+
     # Combine the item name parts into a single string
     item_name = ' '.join(item_name_parts).lower()
 
@@ -3741,17 +3798,14 @@ async def auction_end(ctx, *item_name_parts):
 
     await ctx.send(f"The auction for {matched_item} has been manually ended.")
 
-# Error handling for the auctionend command
-@auction_end.error
-async def auction_end_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("You need the DKP Keeper role to end an auction.")
-    elif isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send("Usage: !auctionend {item name}.")
 
 @bot.command(name="auctioncancel")
-@commands.has_role("DKP Keeper")
 async def auction_cancel(ctx, *item_name_parts):
+
+    result = await role_confirm_command(ctx,"auctioncancel")
+    if result is None:
+        return
+
     # Combine the item name parts into a single string
     item_name = ' '.join(item_name_parts).lower()
 
@@ -3771,22 +3825,18 @@ async def auction_cancel(ctx, *item_name_parts):
 
     await ctx.send(f"The auction for {matched_item} has been canceled.")
 
-# Error handling for the auctioncancel command
-@auction_cancel.error
-async def auction_cancel_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("You need the DKP Keeper role to cancel an auction.")
-    elif isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send("Usage: !auctioncancel {item name}.")
-
 #dkp decay code
 
 # Global variable to control the timer loop
 decay_active = False
 
 @bot.command(name="setdecaypercent")
-@commands.has_role("DKP Keeper")
 async def set_decay_percent(ctx, new_percent: int):
+
+    result = await role_confirm_command(ctx,"setdecaypercent")
+    if result is None:
+        return
+
     # Fetch the DKP Database Channel
     dkp_database_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-database")
     if dkp_database_channel is None:
@@ -3864,18 +3914,13 @@ async def set_decay_percent(ctx, new_percent: int):
     # Send confirmation to the channel
     await ctx.send(f"The decay_percent has been updated to {new_percent}% in both config.csv and decay_savestate.csv.")
 
-# Error handling for the set_decay_percent command
-@set_decay_percent.error
-async def set_decay_percent_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("You need the DKP Keeper role to use this command.")
-    elif isinstance(error, commands.BadArgument):
-        await ctx.send("Invalid argument. Please provide a valid integer for the decay percent.")
-
-
 @bot.command(name="setdecaytimeframe")
-@commands.has_role("DKP Keeper")
 async def set_decay_timeframe(ctx, new_timeframe: int):
+
+    result = await role_confirm_command(ctx,"setdecaytimeframe")
+    if result is None:
+        return
+
     # Fetch the DKP Database Channel
     dkp_database_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-database")
     if dkp_database_channel is None:
@@ -3967,17 +4012,13 @@ async def set_decay_timeframe(ctx, new_timeframe: int):
     # Send confirmation to the channel
     await ctx.send(f"The decay_timeframe has been updated to {new_timeframe} and adjusted in the decay_savestate.csv file.")
 
-# Error handling for the set_decay_timeframe command
-@set_decay_timeframe.error
-async def set_decay_timeframe_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("You need the DKP Keeper role to use this command.")
-    elif isinstance(error, commands.BadArgument):
-        await ctx.send("Invalid argument. Please provide a valid integer for the decay timeframe.")
-
 @bot.command(name="toggledecay")
-@commands.has_role("DKP Keeper")
 async def toggle_decay(ctx):
+
+    result = await role_confirm_command(ctx,"toggledecay")
+    if result is None:
+        return
+
     global decay_active
 
     # Fetch the DKP Database Channel
@@ -4188,15 +4229,13 @@ async def decay_timer(ctx, dkp_database_channel):
             await ctx.send("Invalid data in decay_savestate.csv.")
             return
 
-# Error handling for the toggle_decay command
-@toggle_decay.error
-async def toggle_decay_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("You need the DKP Keeper role to use this command.")
-
 @bot.command(name="restorefromconfig")
-@commands.has_role("DKP Keeper")  # Restrict the command to users with the "DKP Keeper" role
 async def restore_from_config(ctx):
+
+    result = await role_confirm_command(ctx,"restorefromconfig")
+    if result is None:
+        return
+
     # Fetch the DKP Database Channel
     dkp_database_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-database")
     if dkp_database_channel is None:
@@ -4334,11 +4373,120 @@ async def restore_from_config(ctx):
 
     await ctx.send("Restoration process complete.")
 
-# Error handler for MissingRole
-@restore_from_config.error
-async def restore_from_config_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("DKP Keeper role is required to use this command.")
+@bot.command(name="editcommandroles")
+async def editcommandroles(ctx):
+    result = await role_confirm_command(ctx, "editcommandroles")
+    if result is None:
+        return
+
+    config_data, dkp_database_channel, config_message = result
+
+    # Filter only the relevant commands
+    togglable_commands = [
+        row for row in config_data if row[0].startswith("role_req_")
+    ]
+
+    # Paginate the commands into chunks of 23 (leaving space for navigation buttons)
+    commands_per_page = 23
+    pages = [
+        togglable_commands[i:i + commands_per_page]
+        for i in range(0, len(togglable_commands), commands_per_page)
+    ]
+
+    # Function to create the embed and view for a specific page
+    async def create_page_embed(page_index):
+        page_data = pages[page_index]
+        embed = discord.Embed(
+            title=f"Command Role Requirements (Page {page_index + 1}/{len(pages)})",
+            description="Toggle role requirements for commands.",
+        )
+
+        for row in page_data:
+            command_name = row[0].replace("role_req_", "")
+            embed.add_field(name=command_name, value=row[1], inline=True)
+
+        # Create buttons for each command on the current page
+        view = discord.ui.View(timeout=120)
+        for row in page_data:
+            command_name = row[0].replace("role_req_", "")
+            button = discord.ui.Button(
+                label=f"Toggle {command_name}",
+                style=discord.ButtonStyle.primary,
+                custom_id=row[0],
+            )
+            view.add_item(button)
+
+        # Add navigation buttons
+        if len(pages) > 1:
+            if page_index > 0:
+                view.add_item(discord.ui.Button(
+                    label="Previous", style=discord.ButtonStyle.secondary, custom_id="previous_page"
+                ))
+            if page_index < len(pages) - 1:
+                view.add_item(discord.ui.Button(
+                    label="Next", style=discord.ButtonStyle.secondary, custom_id="next_page"
+                ))
+
+        return embed, view
+
+    # Start with the first page
+    current_page = 0
+    embed, view = await create_page_embed(current_page)
+    message = await ctx.send(embed=embed, view=view)
+
+    # Interaction handler
+    @bot.event
+    async def on_interaction(interaction: discord.Interaction):
+        nonlocal current_page, config_message
+
+        # Ensure the interaction is a button press
+        if interaction.data and "custom_id" in interaction.data:
+            custom_id = interaction.data["custom_id"]
+
+            # Check if the user has the "DKP Keeper" role
+            if "DKP Keeper" not in [role.name for role in interaction.user.roles]:
+                await interaction.response.send_message(
+                    "You do not have the required role to interact with this command.", ephemeral=True
+                )
+                return
+
+            # Handle command toggle
+            if custom_id.startswith("role_req_"):
+                # Update the config data
+                for row in config_data:
+                    if row[0] == custom_id:
+                        row[1] = "false" if row[1].lower() == "true" else "true"
+                        break
+
+                # Save updated config.csv
+                output = io.StringIO()
+                writer = csv.writer(output)
+                writer.writerows(config_data)
+                output.seek(0)
+
+                new_config_file = discord.File(io.BytesIO(output.getvalue().encode()), filename="config.csv")
+
+                # Delete the old config.csv message and replace it
+                await config_message.delete()
+                new_config_message = await dkp_database_channel.send(file=new_config_file)
+
+                # Update the reference to the new message
+                config_message = new_config_message
+
+                # Refresh the current page
+                embed, view = await create_page_embed(current_page)
+                await interaction.response.edit_message(embed=embed, view=view)
+
+            # Handle page navigation
+            elif custom_id == "previous_page":
+                current_page -= 1
+                embed, view = await create_page_embed(current_page)
+                await interaction.response.edit_message(embed=embed, view=view)
+
+            elif custom_id == "next_page":
+                current_page += 1
+                embed, view = await create_page_embed(current_page)
+                await interaction.response.edit_message(embed=embed, view=view)
 
 
 help_dict = {
@@ -4350,14 +4498,14 @@ Whenever the command is used, the bot will react to the message with a crossed s
 An example of the log message would be: notbetaorbiter has attended !k155/5 and earned 2 DKP.
 When a reaction has been removed, the bot automatically removes the DKP from the player and logs this in the log channel.
 An example of the DKP removal message: notbetaorbiter has revoked attendance to !k155/4 and lost 1 DKP.
-This command does not require any roles to use.""",
+By default this command does not require any roles to use, but this can be changed via the !editcommandroles command.""",
     'a': """!a
 Usage: !a{boss lvl or name}/{boss stars} user1 user2 user3
 Use !a for another method of DKP Keeping. An example would be: "!a155/4 @ notbetaorbiter", which the bot will then reply to with "1 DKP added for attending 155/4 to: notbetaorbiter". You can use as many members after the boss name as were present at the boss to reduce effort.
 Use of nicknames works as follows: !a155/4 nickname. Nicknames must be set using the !nick command.
 Both nicknames and @user can be used to track attendance.
 See !nick for more information.
-This command requires the DKP keeper role to use.""",
+By default this command requires the DKP Keeper role to use.""",
     'nick': """Usage: !nick @user nickname
 Use !nick to create nicknames for users in the server. This allows you to track attendance more easily without needing to memorize their @user. A good practice is to !nick every person in the server with their in-game name for easier tracking.
 Multiple nicknames can be added to a single user, this allows for handling if they have multiple accounts. To remove a nickname see !nickdelete help page.
@@ -4367,30 +4515,29 @@ The nicknames work for the following commands:
 !dkpsubtract
 !dkpsubtractboth
 !bal
-This command requires the DKP keeper role to use.""",
+By default this command requires the DKP Keeper role to use.""",
     'dkpadd': """Usage: !dkpadd # user1 user2 user3 etc
 
 DKP Keepers can use this command to manually add DKP to either a single user or a set of users defined by the user1 user2 user3 arguments. This can be used to correct DKP values or grant awards of DKP. This will increase both current DKP and lifetime DKP.
 Nicknames can be used for this command. See !nick for more information.
-This command requires the DKP keeper role to use.""",
+By default this command requires the DKP Keeper role to use.""",
     'dkpsubtract': """Usage: !dkpsubtract # user1 user2 user3 etc
 
 DKP Keepers can use this command to manually remove DKP from either a single user or a set of users defined by the user1 user2 user3 arguments. This can be used to correct DKP values or take away DKP due to winning an item, etc. This will reduce current DKP and have no effect on lifetime DKP. To change both, see !dkpsubtractboth.
 Nicknames can be used for this command. See !nick for more information.
-This command requires the DKP keeper role to use.""",
+By default this command requires the DKP Keeper role to use.""",
 
     'dkpsubtractboth': """Usage: !dkpsubtractboth # user1 user2 user3 etc
 
 DKP Keepers can use this command to manually remove DKP from either a single user or a set of users defined by the user1 user2 user3 arguments. This can be used to correct DKP values. This will reduce both current DKP and lifetime DKP.
 Nicknames can be used for this command. See !nick for more information.
-This command requires the DKP keeper role to use.""",
-
+By default this command requires the DKP Keeper role to use.""",
     'setdkp': """Usage: !setdkp {boss lvl or name}/{boss stars} #
 Example: !setdkp 155/4 10
 
 This command is used to change the DKP values for each boss from the defaults stored in the Boss_DKP_Values.csv located in the #dkp-database text channel. 
 This will be saved across sessions; restarting the bot will not reset these values as they are stored in Boss_DKP_Values.csv.
-This command requires the DKP keeper role to use.""",
+By default this command requires the DKP Keeper role to use.""",
 
     'bal': """Usages:
 !bal → returns current and lifetime DKP of the user who sent the message
@@ -4403,11 +4550,11 @@ Nicknames can be used for this command. See !nick for more information.""",
 
     'togglewindows': """Toggle windows is on by default. When true, the bot timers will notify the server when the boss spawn window opens and closes. When false, the bot will notify only when the spawn window opens.
 This command toggles the togglewindows value between true and false in the config.csv located in the #dkp-database text channel.
-This command requires the DKP keeper role to use.""",
+By default this command requires the DKP Keeper role to use.""",
 
     'toggletimers': """Toggle timers is off by default. When true, the #timers channel will be generated, and the timers embed will be sent. When false, the #timers channel will be deleted, and the message removed.
 The #timers channel cannot have messages sent in it except by administrators and the bot itself. To make use of the timers embed, see !{boss} commands.
-This command requires the DKP keeper role to use.""",
+By default this command requires the DKP Keeper role to use.""",
 
     '{boss}': """Usage: !{boss} or for example !155
 
@@ -4447,7 +4594,7 @@ Where boss types are: dl, edl, ringboss, worldboss, legacy
 By default, all boss type text channels are off. 
 This command toggles on and off boss type specific text channels for timer alerts. 
 For example, using !toggle dl will create a text channel called #dl-boss-alerts. Alerts for DL timers will then be sent in that channel.
-This command requires the DKP keeper role to use.""",
+By default this command requires the DKP Keeper role to use.""",
 
     'toggle_role': """Usage: !toggle_role {boss type}
 
@@ -4457,29 +4604,29 @@ By toggling on, users with these roles are the only ones notified when a timer f
 For example, when on, the !155 timer command will result in: @dl The window for boss 155 has opened!
 By default, all boss type roles are off.
 To help assign users these roles, see the help page for the !togglerolechannel.
-This command requires the DKP keeper role to use.""",
+By default this command requires the DKP Keeper role to use.""",
 
     'restorefromconfig': """THIS COMMAND IS ONLY PARTIALLY COMPLETE AFTER UPDATE. This command is used to bring configuration choices across servers. 
 To use: find and download config.csv file from the #dkp-database text channel of the server whose configuration you want to import.
 Delete the current config.csv file in the server you are importing new settings to (if you do not have one in the #dkp-database channel, skip this).
 Send the config.csv of the server whose configuration you want to import into the #dkp-database text channel after adding the bot to the server.
 Then send !restorefromconfig.
-This command requires the DKP keeper role to use.""",
+By default this command requires the DKP Keeper role to use.""",
 
     'createbackup': """This command creates a timestamped backup of the current DKP values of everyone in the server. 
 See help page on !restorefrombackup for more information about using these backups.
-This command requires the DKP keeper role to use.""",
+By default this command requires the DKP Keeper role to use.""",
 
     'restorefrombackup': """This command can only be used after the !createbackup command has been run and there is at least one backup file. 
 This command can also be used to move DKP values across servers via a downloaded backup of the Balances_Database.csv.
 If there is more than one backup file, you will be given the choice of which one to restore from. 
 This command includes a check to ensure that you mean to override the data in the Balances_Database.csv, as they cannot be recovered after the restore.
-This command requires the DKP keeper role to use.""",
+By default this command requires the DKP Keeper role to use.""",
     'togglerolechannel': """This command toggles on and off a channel that allows a user to assign boss timer roles to themselves via clicking on a reaction. If you do not see any roles active you must turn them on via the !toggle_role command. Read about the help page for that command for more information on it.
 
 This channel automatically has an embed within that updates on changes to the active boss timer roles. This approach is suggested if you are using roles to notify users to boss spawns. See !assign if you are adding custom boss types.
 
-This command requires the DKP keeper role to use.""",
+By default this command requires the DKP Keeper role to use.""",
     'toggledecay': """Usage: !toggledecay
 The goal of DKP decay is to incentivize players to remain active as every set amount of time (default of 30 days) their dkp is reduced by a set %  (default 4%).
 
@@ -4491,8 +4638,7 @@ This feature is off by default.
 
 This feature applies to all users and only current DKP and has no effect on lifetime DKP.
 
-This command requires DKP Keeper role to use.
-""",
+By default this command requires the DKP Keeper role to use.""",
     'setdecaypercent': """Usage: !setdecaypercent {integer}
 
 For example !setdecaypercent 5
@@ -4501,7 +4647,7 @@ This command sets the % at which the DKP of all users decays over time. For more
 
 The default value for this setting is 4%.
 
-This command requires DKP Keeper role to use.""",
+By default this command requires the DKP Keeper role to use.""",
     'setdecaytimeframe': """Usage: !setdecaytimeframe {integer}
 
 For example !setdecaytimeframe 5
@@ -4510,7 +4656,7 @@ This command sets the number of days it takes for the DKP of all users to decay.
 
 The default value for this setting is 30 days.
 
-This command requires DKP Keeper role to use.""",
+By default this command requires the DKP Keeper role to use.""",
     'auction': """Usage: !auction {item name} {minimum bid}
 
 For example: !auction rare totem of earth 69
@@ -4527,25 +4673,33 @@ You can end any auction prematurely by using the !auctionend command.
 
 You can cancel any auction by using the !auctioncancel command.
 
-Note: the item name can have multiple words as long as it does not contain numbers.""",
+Note: the item name can have multiple words as long as it does not contain numbers.
+
+By default this command requires the DKP Keeper role to use.""",
     'bid': """Usage: !bid {item name} {amount}
 
-For example: !bid rare torem of earth 420
+For example: !bid rare totem of earth 420
 
 This can be used to bid on any auction as long as the user has enough DKP and it is both over the minimum bid and over their previous bids.""",
     'auctionend': """Usage: !auctionend {item name}
 
 Ends an auction prematurely. This is not the same as canceling an auction. See !auctioncancel.
 
-Whoever is highest bidding when this command is used will win that auction.""",
+Whoever is highest bidding when this command is used will win that auction.
+
+By default this command requires the DKP Keeper role to use.""",
     'auctioncancel': """Usage: !auctioncancel {item name}
 
 Cancels an auction. This is not the same as Ending an auction. See !auctionend.
 
-This will stop an auction entirely with no winners possible.""",
+This will stop an auction entirely with no winners possible.
+
+By default this command requires the DKP Keeper role to use.""",
     'setauctionduration': """Usage: !setauctionduration {integer}
 
-Command to set the number of hours an auction lasts for. By default the length of auctions is 24 hours.""",
+Command to set the number of hours an auction lasts for. By default the length of auctions is 24 hours.
+
+By default this command requires the DKP Keeper role to use.""",
     'toggledkpchannel': """This command toggles on or off a channel that is used to display the DKP values for all bosses that give DKP.
 
 The default for this toggle is false.
@@ -4559,21 +4713,21 @@ Adds a boss to the list of bosses that give DKP. Therefore it can be used with t
 
 This can be used to add custom bosses that do not give DKP by default.
 
-This command requires DKP Keeper role to use.""",
+By default this command requires the DKP Keeper role to use.""",
     'bossdelete': """Usage: !bossdelete {boss}
 
 For example: !bossdelete 155/4
 
 Removes a boss from the list of bosses that give DKP.
 
-This command requires DKP Keeper role to use.""",
+By default this command requires the DKP Keeper role to use.""",
     'nickdelete': """Usage: !nickdelete @{user} {nickname}
 
 For example: !nickdelete @notbetaorbiter notbeta
 
 Removes a nickname from a user.
 
-Requires the DKP Keeper role to use.""",
+By default this command requires the DKP Keeper role to use.""",
     'timeradd': """Usage: !timeradd {boss} {respawn time} {window time} {boss type}
 
 For example: !timeradd 155 60000 180 DL
@@ -4582,14 +4736,14 @@ Supports custom boss types outside of just the standard CH ones, can be populate
 
 Timer for the new boss can then be triggered by doing !{boss} and is displayed in the #timers channel which is toggled via the !toggletimers command. 
 
-Requires the DKP Keeper role to use.""",
+By default this command requires the DKP Keeper role to use.""",
     'timerdelete': """Usage: !timerdelete {boss}
 
 For example: !timerdelete 155
 
 Removes a timer from the list of timers. Used to remove custom bosses that you may be timing currently but will not use in the future. 
 
-Requires the DKP Keeper role to use.""",
+By default this command requires the DKP Keeper role to use.""",
     'timeredit': """Usage: !timeredit {boss} {respawn time} {window time} {boss type}
 
 For example: !timeredit 155 60000 180 DL
@@ -4598,19 +4752,29 @@ Note: all time values are in seconds.
 
 This command is used to edit existing timers to correct errors or cope with game updates.
 
-Requires the DKP Keeper role to use.""",
+By default this command requires the DKP Keeper role to use.""",
     'assign': """Usage: !assign {boss type} 😀
 
 Example: !assign dl 💀
 
 The assign command is used to assign an emoji to a taggable role. This is to be used in conjunction with the role channel added by !togglerolechannel. Note: when assigning an emoji to a boss type you must toggle the role on first for that boss type via the !toggle_role command. This command works with custom boss types added through the !timeradd command.
 
-This command requires the DKP Keeper role to use.""",
-}
+By default this command requires the DKP Keeper role to use.""",
+    'editcommandroles': """Usage: !editcommandroles
+This command allows for any command to be toggled between needing the DKP Keeper role or not. True means the command requires the DKP Keeper role, False means the command can be used by anyone.
 
+By default this command requires the DKP Keeper role to use.""",
+}
 
 @bot.command(name="help")
 async def help_command(ctx, command: str = None):
+    # Skip role check in DMs
+    if ctx.guild is not None:
+        result = await role_confirm_command(ctx, "help")
+        if result is None:
+            return
+
+    # Generate the help message
     if command is None:
         help_message = """
         **Help usage:**
@@ -4623,6 +4787,7 @@ async def help_command(ctx, command: str = None):
         `dkpsubtract`
         `dkpsubtractboth`
         `bal`
+        `editcommandroles`
         `setdkp`
         `togglewindows`
         `toggletimers`
@@ -4657,6 +4822,5 @@ async def help_command(ctx, command: str = None):
         response = help_dict.get(command, "Command not found. Please use `!help` for a list of commands.")
         await ctx.send(response)
 
-
 # Start the bot using your bot token
-bot.run('PUT TOKEN HERE')
+bot.run('Put your bot token here')
