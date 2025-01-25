@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import Embed
+from discord.ui import View, Button
 import csv
 import io
 import aiohttp
@@ -18,25 +19,107 @@ intents.members = True  # Enable fetching members
 
 bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
+DEFAULT_CONFIG = {
+    "togglewindows": "true",
+    "Active_timers": "false",
+    "toggle_dl": "false",
+    "toggle_edl": "false",
+    "toggle_legacy": "false",
+    "toggle_worldboss": "false",
+    "toggle_ringboss": "false",
+    "toggle_dl_role": "false",
+    "toggle_edl_role": "false",
+    "toggle_legacy_role": "false",
+    "toggle_worldboss_role": "false",
+    "toggle_ringboss_role": "false",
+    "toggle_role_channel": "false",
+    "dkp_vals_channel": "false",
+    "auction_duration": "24",
+    "decay_timeframe": "30",
+    "decay_percent": "4",
+    "toggle_decay": "false",
+    "dl_emoji": "🐉",
+    "edl_emoji": "🤖",
+    "legacy_emoji": "🦵",
+    "worldboss_emoji": "👹",
+    "ringboss_emoji": "💍",
+    "toggle_public_help_messages": "false",
+    "nick_doublecheck": "false",
+    "nickdelete_doublecheck": "true",
+    "messagetoggle_a": "true",
+    "messagetoggle_k": "false",
+    "messagetoggle_dkpadd": "true",
+    "messagetoggle_dkpsubtract": "true",
+    "messagetoggle_dkpsubtractboth": "true",
+    "messagetoggle_dkpaddcurrent": "true",
+    "messagetoggle_dkpsubtractlifetime": "true",
+    "messagetoggle_auction": "true",
+    "whograntedtoggle_a": "true",
+    "whograntedtoggle_dkpadd": "true",
+    "whograntedtoggle_dkpsubtract": "true",
+    "whograntedtoggle_dkpsubtractboth": "true",
+    "whograntedtoggle_dkpaddcurrent": "true",
+    "whograntedtoggle_dkpsubtractlifetime": "true",
+    "whograntedtoggle_auction": "true",
+    "role_req_toggledkpchannel": "true",
+    "role_req_a": "true",
+    "role_req_k": "false",
+    "role_req_nick": "true",
+    "role_req_dkpadd": "true",
+    "role_req_dkpsubtract": "true",
+    "role_req_dkpsubtractboth": "true",
+    "role_req_setdkp": "true",
+    "role_req_togglewindows": "true",
+    "role_req_toggletimers": "true",
+    "role_req_toggle": "true",
+    "role_req_toggle_role": "true",
+    "role_req_restorefromconfig": "true",
+    "role_req_createbackup": "true",
+    "role_req_restorefrombackup": "true",
+    "role_req_togglerolechannel": "true",
+    "role_req_toggledecay": "true",
+    "role_req_setdecaypercent": "true",
+    "role_req_setdecaytimeframe": "true",
+    "role_req_bossadd": "true",
+    "role_req_bossdelete": "true",
+    "role_req_timeradd": "true",
+    "role_req_timerdelete": "true",
+    "role_req_timeredit": "true",
+    "role_req_nickdelete": "true",
+    "role_req_auction": "true",
+    "role_req_auctionend": "true",
+    "role_req_auctioncancel": "true",
+    "role_req_setauctionduration": "true",
+    "role_req_backup": "true",
+    "role_req_assign": "true",
+    "role_req_help": "false",
+    "role_req_generatebalances": "false",
+    "role_req_bal": "false",
+    "role_req_cancel": "false",
+    "role_req_bid": "false",
+    "role_req_editcommandroles": "true",
+    "role_req_dkpsubtractlifetime": "true",
+    "role_req_dkpaddcurrent": "true",
+    "role_req_setmain": "true",
+    "role_req_removemain": "true",
+    "role_req_toggles": "true",
+}
+
 
 @bot.event
 async def on_ready():
-    # Set the bot's status
-    #await bot.change_presence(activity=discord.Game(name=" | Made by Notbetaorbiter / Nightshade / Pie123"))
-    global decay_active  # Declare the global variable here
+    global decay_active
     print(f'Bot is ready and logged in as {bot.user}')
 
     for guild in bot.guilds:
-        # Step 1: Check if the "DKP Keeper" role exists
+        # Step 1: Ensure the required roles and channels exist
         role = discord.utils.get(guild.roles, name="DKP Keeper")
-
         if role is None:
             print(f'Creating role "DKP Keeper" in {guild.name}')
             role = await guild.create_role(name="DKP Keeper")
         else:
             print(f'Role "DKP Keeper" already exists in {guild.name}')
 
-        # Step 3: Check if the "dkp-keeping-log" channel exists
         log_channel = discord.utils.get(guild.text_channels, name="dkp-keeping-log")
         if log_channel is None:
             print(f'Creating channel "dkp-keeping-log" in {guild.name}')
@@ -49,7 +132,6 @@ async def on_ready():
             await log_channel.set_permissions(guild.default_role, view_channel=False)
             await log_channel.set_permissions(role, view_channel=True)
 
-        # Step 4: Check if the "dkp-database" channel exists
         db_channel = discord.utils.get(guild.text_channels, name="dkp-database")
         if db_channel is None:
             print(f'Creating channel "dkp-database" in {guild.name}')
@@ -62,45 +144,42 @@ async def on_ready():
             await db_channel.set_permissions(guild.default_role, view_channel=False)
             await db_channel.set_permissions(role, view_channel=True)
 
-        # Step 5: Check if the "Boss_DKP_Values.csv" exists
-        message = await find_csv_message(db_channel, "Boss_DKP_Values.csv")
-        if message is None:
-            print(f'Creating Boss_DKP_Values.csv in {guild.name}')
-            await create_dkp_values_csv(guild)
-        else:
-            print(f"Boss_DKP_Values.csv already exists in {guild.name}")
+        # Step 2: Ensure the required CSV files exist
+        for file_name, create_func in [
+            ("Boss_DKP_Values.csv", create_dkp_values_csv),
+            ("Balances_Database.csv", create_balances_csv),
+            ("Boss_Timers.csv", create_timers_csv),
+            ("config.csv", create_config_csv)
+        ]:
+            message = await find_csv_message(db_channel, file_name)
+            if message is None:
+                print(f'Creating {file_name} in {guild.name}')
+                await create_func(guild)
+            else:
+                print(f"{file_name} already exists in {guild.name}")
 
-        # Step 6: Check if the "Balances_Database.csv" exists
-        message = await find_csv_message(db_channel, "Balances_Database.csv")
-        if message is None:
-            print(f'Creating Balances_Database.csv in {guild.name}')
-            await create_balances_csv(guild)
-        else:
-            print(f"Balances_Database.csv already exists in {guild.name}")
-        # Step 7: Check if the "Boss_Timers.csv" exists
-        message = await find_csv_message(db_channel, "Boss_Timers.csv")
-        if message is None:
-            print(f'Creating Boss_Timers.csv in {guild.name}')
-            await create_timers_csv(guild)
-        else:
-            print(f"Boss_Timers.csv already exists in {guild.name}")
-        # Step 8: Check if the "config.csv" exists
-        message = await find_csv_message(db_channel, "config.csv")
-        if message is None:
-            print(f'Creating config.csv in {guild.name}')
-            await create_config_csv(guild)
-        else:
-            print(f"config.csv already exists in {guild.name}")
-            # Check if Active_timers is enabled in config.csv
-        # New Step 8.5?: Check if toggle_decay is set to true and restart the decay timer if necessary
-            config_data = await download_csv(message.attachments[0])
-            if config_data is not None:
-                for row in config_data:
-                    if row[0] == "toggle_decay" and row[1].lower() == "true":
-                        print(f"toggle_decay is set to true in {guild.name}. Restarting decay timer.")
-                        decay_active = True  # Set decay_active to true
-                        await decay_timer(None, db_channel)  # Start the decay timer
-                        break
+                # Step 3: Validate and update config.csv if it exists
+                if file_name == "config.csv":
+                    config_data = await download_csv(message.attachments[0])
+                    if config_data is not None:
+                        updated_config = update_config_with_defaults(config_data)
+                        if updated_config:
+                            output = io.StringIO()
+                            writer = csv.writer(output)
+                            writer.writerows(config_data)
+                            output.seek(0)
+
+                            new_config_file = discord.File(io.BytesIO(output.getvalue().encode()), filename="config.csv")
+                            await db_channel.send(file=new_config_file)
+                            await message.delete()
+
+                        # Check if toggle_decay is enabled
+                        for row in config_data:
+                            if row[0] == "toggle_decay" and row[1].lower() == "true":
+                                print(f"toggle_decay is set to true in {guild.name}. Restarting decay timer.")
+                                decay_active = True
+                                await decay_timer(None, db_channel)
+                                break
 
 # Dictionary to store boss names, timer durations (when the boss is dead), and window durations (when it can spawn)
 boss_timers = {
@@ -153,6 +232,17 @@ async def create_timers_csv(guild):
         # Send the new CSV file to the "dkp-database" channel
         timers_file = discord.File(io.BytesIO(output.getvalue().encode()), filename="Boss_Timers.csv")
         await dkp_database_channel.send("Here are the timers for each boss:", file=timers_file)
+
+def update_config_with_defaults(config_data):
+    updated = False
+    existing_settings = {row[0]: row[1] for row in config_data}
+
+    for setting, default_value in DEFAULT_CONFIG.items():
+        if setting not in existing_settings:
+            config_data.append([setting, default_value])
+            updated = True
+    return updated
+
 
 @bot.command(name="timeradd")
 @commands.has_role("DKP Keeper")  # Restrict the command to users with the "DKP Keeper" role
@@ -709,88 +799,47 @@ async def create_balances_csv(guild):
     # Write the header for the CSV
     writer.writerow(["Username", "Current Balance", "Lifetime Balance"])
 
-    # Loop through all members of the server and set their initial balances to 0
+    # Fetch the DKP Database Channel
+    dkp_database_channel = discord.utils.get(guild.text_channels, name="dkp-database")
+    if dkp_database_channel is None:
+        return  # Exit if the channel doesn't exist
+
+    # Find the "Nicknames.csv" message in the "dkp-database" channel
+    nickname_message = await find_csv_message(dkp_database_channel, "Nicknames.csv")
+    nicknames = []
+
+    if nickname_message is not None:
+        # Download and parse the Nicknames.csv file
+        nickname_csv_file = nickname_message.attachments[0]
+        nickname_csv_data = await download_csv(nickname_csv_file)
+
+        if nickname_csv_data is not None:
+            # Collect all nicknames
+            for row in nickname_csv_data:
+                username = row[0]
+                nickname_list = row[1].split(", ")
+                nicknames.extend([[nickname, username] for nickname in nickname_list])
+
+    # Add all members to the balances CSV
     for member in guild.members:
         writer.writerow([member.name, 0, 0])
+
+    # Add all nicknames to the balances CSV
+    for nickname, username in nicknames:
+        writer.writerow([nickname, 0, 0])
 
     # Seek to the beginning of the StringIO buffer
     output.seek(0)
 
-    # Fetch the DKP Database Channel
-    dkp_database_channel = discord.utils.get(guild.text_channels, name="dkp-database")
-    if dkp_database_channel is not None:
-        # Create a discord.File object from the CSV data
-        dkp_file = discord.File(io.BytesIO(output.getvalue().encode()), filename="Balances_Database.csv")
-        # Send the file to the dkp-database channel without a message
-        await dkp_database_channel.send(file=dkp_file)
+    # Create a discord.File object from the CSV data
+    dkp_file = discord.File(io.BytesIO(output.getvalue().encode()), filename="Balances_Database.csv")
+
+    # Send the file to the dkp-database channel without a message
+    await dkp_database_channel.send(file=dkp_file)
 
 async def create_config_csv(guild):
-    # Create the content for the config.csv file, including the new emoji fields
-    config_data = [
-        ["Setting", "Choice"],
-        ["togglewindows", "true"],
-        ["Active_timers", "false"],
-        ["toggle_dl", "false"],
-        ["toggle_edl", "false"],
-        ["toggle_legacy", "false"],
-        ["toggle_worldboss", "false"],
-        ["toggle_ringboss", "false"],
-        ["toggle_dl_role", "false"],
-        ["toggle_edl_role", "false"],
-        ["toggle_legacy_role", "false"],
-        ["toggle_worldboss_role", "false"],
-        ["toggle_ringboss_role", "false"],
-        ["toggle_role_channel", "false"],
-        ["dkp_vals_channel", "false"],
-        ["auction_duration", "24"],
-        ["decay_timeframe", "30"],
-        ["decay_percent", "4"],
-        ["toggle_decay", "false"],
-        ["dl_emoji", "🐉"],
-        ["edl_emoji", "🤖"],
-        ["legacy_emoji", "🦵"],
-        ["worldboss_emoji", "👹"],
-        ["ringboss_emoji", "💍"],
-        ["role_req_toggledkpchannel", "true"],
-        ["role_req_a", "true"],
-        ["role_req_k", "false"],
-        ["role_req_nick", "true"],
-        ["role_req_dkpadd", "true"],
-        ["role_req_dkpsubtract", "true"],
-        ["role_req_dkpsubtractboth", "true"],
-        ["role_req_setdkp", "true"],
-        ["role_req_togglewindows", "true"],
-        ["role_req_toggletimers", "true"],
-        ["role_req_toggle", "true"],
-        ["role_req_toggle_role", "true"],
-        ["role_req_restorefromconfig", "true"],
-        ["role_req_createbackup", "true"],
-        ["role_req_restorefrombackup", "true"],
-        ["role_req_togglerolechannel", "true"],
-        ["role_req_toggledecay", "true"],
-        ["role_req_setdecaypercent", "true"],
-        ["role_req_setdecaytimeframe", "true"],
-        ["role_req_bossadd", "true"],
-        ["role_req_bossdelete", "true"],
-        ["role_req_timeradd", "true"],
-        ["role_req_timerdelete", "true"],
-        ["role_req_timeredit", "true"],
-        ["role_req_nickdelete", "true"],
-        ["role_req_auction", "true"],
-        ["role_req_auctionend", "true"],
-        ["role_req_auctioncancel", "true"],
-        ["role_req_setauctionduration", "true"],
-        ["role_req_backup", "true"],
-        ["role_req_assign", "true"],
-        ["role_req_help", "false"],
-        ["role_req_generatebalances", "false"],
-        ["role_req_bal", "false"],
-        ["role_req_cancel", "false"],
-        ["role_req_bid", "false"],
-        ["role_req_editcommandroles", "true"],
-        ["role_req_dkpsubtractlifetime", "true"],
-        ["role_req_dkpaddcurrent", "true"]
-    ]
+    # Create the header and populate the settings from DEFAULT_CONFIG
+    config_data = [["Setting", "Choice"]] + [[setting, value] for setting, value in DEFAULT_CONFIG.items()]
 
     # Create an in-memory file for the CSV
     output = io.StringIO()
@@ -807,6 +856,9 @@ async def create_config_csv(guild):
     if db_channel:
         # Send the config.csv file to the channel
         await db_channel.send(file=config_file)
+        print(f"config.csv created and sent to the 'dkp-database' channel in {guild.name}.")
+    else:
+        print(f"Could not find the 'dkp-database' channel in {guild.name}.")
 
 async def get_dkp_value_for_boss(boss_command, guild):
     # Fetch the DKP Database Channel
@@ -983,6 +1035,153 @@ async def on_message(message):
     # Allow the bot to process other commands after on_message event
     await bot.process_commands(message)
 
+async def handle_attendance_command(message):
+    # Load valid commands dynamically from the Boss_DKP_Values.csv
+    valid_commands = await load_valid_commands()
+
+    # Extract the boss command and users from message content
+    parts = message.content.split(" ")
+    boss_command = parts[0][2:]  # Extract the boss part (e.g., 155/4)
+    names = parts[1:]  # Get the remaining parts as names
+
+    if len(names) == 0:
+        await message.channel.send("Please mention at least one user or nickname.")
+        return
+
+    # Check if the boss is a valid command
+    if f"!a{boss_command}".lower() not in valid_commands:
+        await message.channel.send(f"Could not find DKP value for {boss_command}.")
+        return
+
+    # Find the DKP value for the boss from the CSV
+    dkp_value = await get_dkp_value_for_boss(boss_command, message.guild)
+    if dkp_value is None:
+        await message.channel.send(f"Could not find DKP value for {boss_command}.")
+        return
+
+    # Fetch the DKP Database Channel
+    dkp_database_channel = discord.utils.get(message.guild.text_channels, name="dkp-database")
+    if dkp_database_channel is None:
+        await message.channel.send("The DKP database channel does not exist.")
+        return
+
+    # Find the "Balances_Database.csv" message in the "dkp-database" channel
+    balance_message = await find_csv_message(dkp_database_channel, "Balances_Database.csv")
+    if balance_message is None:
+        await message.channel.send("Could not find the Balances_Database.csv file.")
+        return
+
+    # Find the "Nicknames.csv" message in the "dkp-database" channel
+    nickname_message = await find_csv_message(dkp_database_channel, "Nicknames.csv")
+    nicknames = {}
+    mains = {}
+
+    if nickname_message is not None:
+        # Download and parse the Nicknames.csv file
+        nickname_csv_file = nickname_message.attachments[0]
+        nickname_csv_data = await download_csv(nickname_csv_file)
+
+        if nickname_csv_data is not None:
+            # Create dictionaries for nicknames and main entries
+            for row in nickname_csv_data:
+                nickname_list = row[1].split(", ") if row[1] else []
+                for nick in nickname_list:
+                    nicknames[nick.lower()] = row[0]  # Nickname -> Username mapping
+                if len(row) > 2 and row[2]:  # Check if a main is assigned
+                    mains[row[0]] = row[2]  # Username -> Main Nickname mapping
+
+    # Download and parse the Balances CSV file
+    balance_csv_file = balance_message.attachments[0]
+    balance_csv_data = await download_csv(balance_csv_file)
+
+    if balance_csv_data is None:
+        await message.channel.send("Could not download or parse the Balances_Database.csv file.")
+        return
+
+    # Modify the data for each name
+    updated_members = []
+    for name in names:
+        target_name = None
+
+        # Check if the name is a mention
+        if name.startswith("<@") and name.endswith(">"):
+            # Extract user ID from the mention format
+            user_id = name.replace("<@", "").replace(">", "").replace("!", "")
+            member = message.guild.get_member(int(user_id))
+            if member:
+                # Use the main nickname if it exists, otherwise default to the user's name
+                target_name = mains.get(member.name, member.name)
+        else:
+            # Check if it's a nickname
+            if name.lower() in nicknames:
+                target_name = name.lower()  # Use the nickname directly
+            else:
+                # Fallback: Check if it's a username
+                member = discord.utils.get(message.guild.members, name=name)
+                if member:
+                    target_name = member.name  # Use the username directly
+
+        if not target_name:
+            await message.channel.send(f"Could not find user or nickname: {name}")
+            continue
+
+        # Update DKP for the found target
+        updated = False
+        for row in balance_csv_data:
+            if row[0].lower() == target_name:  # Match by name or nickname
+                current_balance = int(row[1]) + dkp_value
+                lifetime_balance = int(row[2]) + dkp_value
+                row[1] = str(current_balance)
+                row[2] = str(lifetime_balance)
+                updated = True
+                break
+
+        # If the target was not found, add them
+        if not updated:
+            balance_csv_data.append([target_name, str(dkp_value), str(dkp_value)])
+
+        updated_members.append(target_name)
+
+    if not updated_members:
+        await message.channel.send("No users or nicknames were found or processed for attendance.")
+        return  # Exit if no members were successfully processed
+
+    # Create a new CSV file with the updated data
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerows(balance_csv_data)
+    output.seek(0)
+
+    # Send the updated CSV to the "dkp-database" channel
+    new_csv_file = discord.File(io.BytesIO(output.getvalue().encode()), filename="Balances_Database.csv")
+    await dkp_database_channel.send(file=new_csv_file)
+
+    # Delete the original message containing the old CSV
+    await balance_message.delete()
+
+    # Check if logging is enabled
+    config_message = await find_csv_message(dkp_database_channel, "config.csv")
+    if config_message is not None:
+        # Download and parse the config.csv file
+        config_file = config_message.attachments[0]
+        config_data = await download_csv(config_file)
+
+        if config_data is not None:
+            # Find the "messagetoggle_a" and "whograntedtoggle_a" settings
+            log_toggle = next((row[1] for row in config_data if row[0] == "messagetoggle_a"), "true").lower()
+            who_granted_toggle = next((row[1] for row in config_data if row[0] == "whograntedtoggle_a"), "false").lower()
+
+            if log_toggle == "true":
+                # Log the attendance in the DKP log channel
+                log_channel = discord.utils.get(message.guild.text_channels, name="dkp-keeping-log")
+                if log_channel:
+                    granted_by = f"{message.author.display_name} granted: " if who_granted_toggle == "true" else ""
+                    await log_channel.send(
+                        f"{granted_by}{', '.join(updated_members)} have attended {boss_command} and earned {dkp_value} DKP."
+                    )
+
+    # Send confirmation to the channel where the command was issued
+    await message.channel.send(f"{dkp_value} DKP added for attending {boss_command} to:\n" + "\n".join(updated_members))
 
 async def load_valid_commands():
     # Fetch the DKP Database Channel
@@ -1011,6 +1210,81 @@ async def load_valid_commands():
 
     return valid_commands
 
+# helper function for reaction addition to cope with new nickname tech
+async def update_dkp_for_user(member, target_name, dkp_value, boss_name, guild, add=True):
+    # Fetch the DKP Database Channel
+    dkp_database_channel = discord.utils.get(guild.text_channels, name="dkp-database")
+    if dkp_database_channel is None:
+        print("The DKP database channel does not exist.")
+        return
+
+    # Find the "Balances_Database.csv" message in the "dkp-database" channel
+    csv_message = await find_csv_message(dkp_database_channel, "Balances_Database.csv")
+    if csv_message is None:
+        print("Could not find the Balances_Database.csv file.")
+        return
+
+    # Download and parse the CSV file
+    csv_file = csv_message.attachments[0]
+    csv_data = await download_csv(csv_file)
+
+    if csv_data is None:
+        print("Could not download or parse the CSV file.")
+        return
+
+    # Modify the data
+    updated = False
+    for row in csv_data:
+        if row[0] == target_name:  # Match by name
+            current_balance = int(row[1]) + dkp_value if add else int(row[1]) - dkp_value
+            lifetime_balance = int(row[2]) + dkp_value if add else int(row[2]) - dkp_value
+            row[1] = str(current_balance)
+            row[2] = str(lifetime_balance)
+            updated = True
+            break
+
+    # If the user was not found, add them to the CSV (for addition only)
+    if not updated and add:
+        csv_data.append([target_name, str(dkp_value), str(dkp_value)])
+
+    # Create a new CSV file with the updated data
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerows(csv_data)
+    output.seek(0)
+
+    # Send the updated CSV to the "dkp-database" channel
+    new_csv_file = discord.File(io.BytesIO(output.getvalue().encode()), filename="Balances_Database.csv")
+    await dkp_database_channel.send(file=new_csv_file)
+
+    # Delete the original message containing the old CSV
+    await csv_message.delete()
+
+    # Check if logging is enabled
+    config_message = await find_csv_message(dkp_database_channel, "config.csv")
+    if config_message is not None:
+        # Download and parse the config.csv file
+        config_file = config_message.attachments[0]
+        config_data = await download_csv(config_file)
+
+        if config_data is not None:
+            # Find the "messagetoggle_k" setting
+            log_toggle = next((row[1] for row in config_data if row[0] == "messagetoggle_k"), "true").lower()
+            if log_toggle == "true":
+                # Log to the DKP log channel
+                log_channel = discord.utils.get(guild.text_channels, name="dkp-keeping-log")
+                if log_channel:
+                    action = "earned" if add else "lost"
+                    if target_name == member.name:
+                        # Simple message if the target is the username
+                        log_message = f"{member.display_name} has {action} {dkp_value} DKP for {boss_name}."
+                    else:
+                        # Include the linked text if the target is a nickname
+                        log_message = f"{target_name} (linked to {member.display_name}) has {action} {dkp_value} DKP for {boss_name}."
+                    await log_channel.send(log_message)
+
+reaction_tracking = {}  # Dictionary to track reactions { (message_id, user_id): nickname }
+
 @bot.event
 async def on_raw_reaction_add(payload):
     guild = bot.get_guild(payload.guild_id)
@@ -1021,24 +1295,14 @@ async def on_raw_reaction_add(payload):
     if member.bot:
         return  # Ignore bot reactions
 
-    # Load valid commands from the Boss_DKP_Values.csv dynamically
+    # Load valid commands dynamically from the Boss_DKP_Values.csv
     valid_commands = await load_valid_commands()
 
-    # Check if the reaction is in the "get-timer-roles" channel
-    if channel.name == "get-timer-roles":
-        role = await get_role_from_emoji(guild, payload.emoji)
-        if role:
-            await member.add_roles(role)  # Assign the role to the user
-
-    # Check if it's a DKP command message
-    elif str(payload.emoji) == '⚔️' and message.content.lower() in valid_commands:
+    if str(payload.emoji) == '⚔️' and message.content.lower() in valid_commands:
         command = message.content.lower()
-
-        # Strip the "!k" prefix to log the boss name without it
-        boss_name = command.replace("!k", "")
-
-        # Get the DKP value from the CSV
+        boss_name = command.replace("!k", "")  # Extract boss name
         dkp_value = await get_dkp_value_for_boss(command, guild)
+
         if dkp_value is None:
             print(f"Could not find DKP value for {command}.")
             return
@@ -1049,53 +1313,69 @@ async def on_raw_reaction_add(payload):
             print("The DKP database channel does not exist.")
             return
 
-        # Find the "Balances_Database.csv" message in the "dkp-database" channel
-        csv_message = await find_csv_message(dkp_database_channel, "Balances_Database.csv")
-        if csv_message is None:
-            print("Could not find the Balances_Database.csv file.")
+        # Fetch user nicknames from Nicknames.csv
+        nickname_message = await find_csv_message(dkp_database_channel, "Nicknames.csv")
+        nicknames = []
+        main_nickname = None
+
+        if nickname_message:
+            nickname_csv_file = nickname_message.attachments[0]
+            nickname_csv_data = await download_csv(nickname_csv_file)
+
+            if nickname_csv_data:
+                for row in nickname_csv_data:
+                    if row[0] == member.name:  # Match username
+                        nicknames = row[1].split(", ") if row[1] else []
+                        main_nickname = row[2] if len(row) > 2 else None
+                        break
+
+        # Determine if a prompt is needed
+        if len(nicknames) == 1 and nicknames[0] == main_nickname:
+            # Only one nickname, and it's the "main" — credit directly
+            await update_dkp_for_user(member, main_nickname, dkp_value, boss_name, guild, add=True)
             return
 
-        # Download and parse the CSV file
-        csv_file = csv_message.attachments[0]
-        csv_data = await download_csv(csv_file)
+        # Prepare options for selection
+        view = discord.ui.View()
 
-        if csv_data is None:
-            print("Could not download or parse the CSV file.")
-            return
+        # Add the user's username as an option if no main is set
+        if not main_nickname:
+            button = discord.ui.Button(label=member.name, custom_id=f"add_dkp_{member.name}")
+            view.add_item(button)
 
-        # Modify the data (Add DKP to both current and lifetime)
-        updated = False
-        for row in csv_data:
-            if row[0] == member.name:  # Match by username
-                current_balance = int(row[1]) + dkp_value
-                lifetime_balance = int(row[2]) + dkp_value
-                row[1] = str(current_balance)
-                row[2] = str(lifetime_balance)
-                updated = True
-                break
+        # Add all nicknames as options
+        for nickname in nicknames:
+            button = discord.ui.Button(label=nickname, custom_id=f"add_dkp_{nickname}")
+            view.add_item(button)
 
-        # If the user was not found, add them to the CSV
-        if not updated:
-            csv_data.append([member.name, str(dkp_value), str(dkp_value)])  # Add new user
+        # Handle button interaction
+        async def button_callback(interaction):
+            if interaction.user.id != member.id:
+                await interaction.response.send_message("This selection is not for you.", ephemeral=True)
+                return
 
-        # Create a new CSV file with the updated data
-        output = io.StringIO()
-        writer = csv.writer(output)
-        writer.writerows(csv_data)
-        output.seek(0)
+            selected_nickname = interaction.data["custom_id"].split("_")[2]
 
-        # Send the updated CSV to the "dkp-database" channel
-        new_csv_file = discord.File(io.BytesIO(output.getvalue().encode()), filename="Balances_Database.csv")
-        await dkp_database_channel.send(file=new_csv_file)
+            # Update DKP for the selected nickname or username
+            await update_dkp_for_user(member, selected_nickname, dkp_value, boss_name, guild, add=True)
 
-        # Delete the original message containing the old CSV
-        await csv_message.delete()
+            # Update reaction tracking
+            reaction_tracking[(message.id, member.id)] = selected_nickname
 
-        # Log to the DKP log channel
-        log_channel = discord.utils.get(guild.text_channels, name="dkp-keeping-log")
-        if log_channel:
-            await log_channel.send(f"{member.display_name} has attended {boss_name} and earned {dkp_value} DKP.")
+            await interaction.response.send_message(
+                f"DKP for {boss_name} has been added to {selected_nickname}.", ephemeral=True
+            )
+            await temp_message.delete()
 
+        # Add callback to buttons
+        for button in view.children:
+            button.callback = button_callback
+
+        # Send the selection message (tag the user for clarity)
+        temp_message = await message.channel.send(
+            content=f"{member.mention}, which account should gain DKP for {boss_name}?",
+            view=view
+        )
 
 @bot.event
 async def on_raw_reaction_remove(payload):
@@ -1104,83 +1384,96 @@ async def on_raw_reaction_remove(payload):
     message = await channel.fetch_message(payload.message_id)
     member = guild.get_member(payload.user_id)
 
-    if member.bot:
-        return  # Ignore bot reactions
+    if member is None or member.bot:
+        return  # Ignore bot reactions or missing members
 
-    # Load valid commands from the Boss_DKP_Values.csv dynamically
+    # Load valid commands dynamically from the Boss_DKP_Values.csv
     valid_commands = await load_valid_commands()
 
-    # Check if the reaction is in the "get-timer-roles" channel
-    if channel.name == "get-timer-roles":
-        role = await get_role_from_emoji(guild, payload.emoji)
-        if role:
-            await member.remove_roles(role)  # Remove the role from the user
-
-    # Check if it's a DKP command message
-    elif str(payload.emoji) == '⚔️' and message.content.lower() in valid_commands:
+    if str(payload.emoji) == '⚔️' and message.content.lower() in valid_commands:
         command = message.content.lower()
-
-        # Strip the "!k" prefix to log the boss name without it
-        boss_name = command.replace("!k", "")
-
-        # Get the DKP value from the CSV
+        boss_name = command.replace("!k", "")  # Extract boss name
         dkp_value = await get_dkp_value_for_boss(command, guild)
+
         if dkp_value is None:
             print(f"Could not find DKP value for {command}.")
             return
 
+        # Check reaction tracking
+        tracked_nickname = reaction_tracking.pop((message.id, member.id), None)
+
+        if tracked_nickname:
+            # Remove DKP using the tracked nickname
+            await update_dkp_for_user(member, tracked_nickname, dkp_value, boss_name, guild, add=False)
+            return  # Exit early if the tracked nickname exists
+
+        # Fallback: Handle cases where the bot was restarted or no nickname was tracked
         # Fetch the DKP Database Channel
         dkp_database_channel = discord.utils.get(guild.text_channels, name="dkp-database")
         if dkp_database_channel is None:
             print("The DKP database channel does not exist.")
             return
 
-        # Find the "Balances_Database.csv" message in the "dkp-database" channel
-        csv_message = await find_csv_message(dkp_database_channel, "Balances_Database.csv")
-        if csv_message is None:
-            print("Could not find the Balances_Database.csv file.")
+        # Fetch the user's nicknames from Nicknames.csv
+        nickname_message = await find_csv_message(dkp_database_channel, "Nicknames.csv")
+        nicknames = []
+        main_nickname = None
+
+        if nickname_message:
+            nickname_csv_file = nickname_message.attachments[0]
+            nickname_csv_data = await download_csv(nickname_csv_file)
+
+            if nickname_csv_data:
+                for row in nickname_csv_data:
+                    if row[0] == member.name:  # Match username
+                        nicknames = row[1].split(", ") if row[1] else []
+                        main_nickname = row[2] if len(row) > 2 else None
+                        break
+
+        # Determine if a prompt is needed
+        if len(nicknames) == 1 and nicknames[0] == main_nickname:
+            # Only one nickname, and it's the "main" — remove DKP directly
+            await update_dkp_for_user(member, main_nickname, dkp_value, boss_name, guild, add=False)
             return
 
-        # Download and parse the CSV file
-        csv_file = csv_message.attachments[0]
-        csv_data = await download_csv(csv_file)
+        # Prepare options for selection
+        view = discord.ui.View()
 
-        if csv_data is None:
-            print("Could not download or parse the CSV file.")
-            return
+        # Add the user's username as an option if no main is set
+        if not main_nickname:
+            button = discord.ui.Button(label=member.name, custom_id=f"remove_dkp_{member.name}")
+            view.add_item(button)
 
-        # Modify the data (Subtract DKP from both current and lifetime)
-        updated = False
-        for row in csv_data:
-            if row[0] == member.name:  # Match by username
-                current_balance = int(row[1]) - dkp_value
-                lifetime_balance = int(row[2]) - dkp_value
-                row[1] = str(current_balance)
-                row[2] = str(lifetime_balance)
-                updated = True
-                break
+        # Add all nicknames as options
+        for nickname in nicknames:
+            button = discord.ui.Button(label=nickname, custom_id=f"remove_dkp_{nickname}")
+            view.add_item(button)
 
-        if not updated:
-            print(f"User {member.name} not found in the CSV.")
-            return
+        # Handle button interaction
+        async def button_callback(interaction):
+            if interaction.user.id != member.id:
+                await interaction.response.send_message("This selection is not for you.", ephemeral=True)
+                return
 
-        # Create a new CSV file with the updated data
-        output = io.StringIO()
-        writer = csv.writer(output)
-        writer.writerows(csv_data)
-        output.seek(0)
+            selected_nickname = interaction.data["custom_id"].split("_")[2]
 
-        # Send the updated CSV to the "dkp-database" channel
-        new_csv_file = discord.File(io.BytesIO(output.getvalue().encode()), filename="Balances_Database.csv")
-        await dkp_database_channel.send(file=new_csv_file)
+            # Remove DKP for the selected nickname or username
+            await update_dkp_for_user(member, selected_nickname, dkp_value, boss_name, guild, add=False)
 
-        # Delete the original message containing the old CSV
-        await csv_message.delete()
+            await interaction.response.send_message(
+                f"DKP for {boss_name} has been removed from {selected_nickname}.", ephemeral=True
+            )
+            await temp_message.delete()
 
-        # Log to the DKP log channel
-        log_channel = discord.utils.get(guild.text_channels, name="dkp-keeping-log")
-        if log_channel:
-            await log_channel.send(f"{member.display_name} has revoked attendance to {boss_name} and lost {dkp_value} DKP.")
+        # Add callback to buttons
+        for button in view.children:
+            button.callback = button_callback
+
+        # Send the selection message (tag the user for clarity)
+        temp_message = await message.channel.send(
+            content=f"{member.mention}, which account should lose DKP for {boss_name}?",
+            view=view
+        )
 
 @bot.command(name="createbackup")
 async def create_backup(ctx):
@@ -1461,7 +1754,7 @@ async def role_confirm_command(ctx_or_message, command_name):
 
 @bot.command(name="dkpadd")
 async def dkp_add(ctx, dkp_value: int, *names: str):
-    result = await role_confirm_command(ctx,"dkpadd")
+    result = await role_confirm_command(ctx, "dkpadd")
     if result is None:
         return
 
@@ -1485,6 +1778,7 @@ async def dkp_add(ctx, dkp_value: int, *names: str):
     # Find the "Nicknames.csv" message in the "dkp-database" channel
     nickname_message = await find_csv_message(dkp_database_channel, "Nicknames.csv")
     nicknames = {}
+    mains = {}
 
     if nickname_message is not None:
         # Download and parse the Nicknames.csv file
@@ -1492,11 +1786,13 @@ async def dkp_add(ctx, dkp_value: int, *names: str):
         nickname_csv_data = await download_csv(nickname_csv_file)
 
         if nickname_csv_data is not None:
-            # Create a dictionary of usernames mapped to their nicknames
+            # Create dictionaries for nicknames and main entries
             for row in nickname_csv_data:
-                nickname_list = row[1].split(", ")
+                nickname_list = row[1].split(", ") if row[1] else []
                 for nick in nickname_list:
                     nicknames[nick.lower()] = row[0]  # Nickname -> Username mapping
+                if len(row) > 2 and row[2]:  # Check if a main is assigned
+                    mains[row[0]] = row[2]  # Username -> Main Nickname mapping
 
     # Download and parse the Balances CSV file
     csv_file = message.attachments[0]
@@ -1506,36 +1802,40 @@ async def dkp_add(ctx, dkp_value: int, *names: str):
         await ctx.send("Could not download or parse the Balances_Database.csv file.")
         return
 
-    # Modify the data for each name (which could be a username, mention, or a nickname)
+    # Modify the data for each name
     updated_members = []
     for name in names:
-        member = None
+        target_name = None
 
         # Check if the name is a mention
         if name.startswith("<@") and name.endswith(">"):
             # Extract user ID from the mention format
             user_id = name.replace("<@", "").replace(">", "").replace("!", "")
             member = ctx.guild.get_member(int(user_id))
+            if member:
+                # Use the main nickname if it exists, otherwise default to the user's name
+                target_name = mains.get(member.name, member.name)
         else:
-            # If the name is not a mention, check if it's a nickname or username
-            member = discord.utils.get(ctx.guild.members, name=name)
+            # Check if it's a nickname
+            if name.lower() in nicknames:
+                target_name = name.lower()  # Use the nickname directly
+            else:
+                # Fallback: Check if it's a username
+                member = discord.utils.get(ctx.guild.members, name=name)
+                if member:
+                    target_name = member.name  # Use the username directly
 
-            # If no user by that name, check if it's a nickname
-            if member is None and name.lower() in nicknames:
-                real_username = nicknames[name.lower()]
-                member = discord.utils.get(ctx.guild.members, name=real_username)
-
-        if member is None:
+        if not target_name:
             await ctx.send(f"Could not find user or nickname: {name}")
             continue
 
-        # Update DKP for the found member
+        # Update DKP for the found target
         updated = False
         current_balance = 0
         lifetime_balance = 0
 
         for row in csv_data:
-            if row[0] == member.name:  # Match by username
+            if row[0].lower() == target_name:  # Match by name or nickname
                 current_balance = int(row[1]) + dkp_value
                 lifetime_balance = int(row[2]) + dkp_value
                 row[1] = str(current_balance)
@@ -1543,17 +1843,16 @@ async def dkp_add(ctx, dkp_value: int, *names: str):
                 updated = True
                 break
 
-        # If the user was not found in the CSV, add them
+        # If the target was not found, add them
         if not updated:
             current_balance = dkp_value
             lifetime_balance = dkp_value
-            csv_data.append([member.name, str(current_balance), str(lifetime_balance)])  # Add new user
+            csv_data.append([target_name, str(current_balance), str(lifetime_balance)])
 
-        updated_members.append(
-            f"{member.display_name} - current balance: {current_balance} - lifetime balance: {lifetime_balance}")
+        updated_members.append(f"{target_name} - current balance: {current_balance} - lifetime balance: {lifetime_balance}")
 
     if not updated_members:
-        await ctx.send("No users were found or processed for DKP.")
+        await ctx.send("No users or nicknames were found or processed for DKP.")
         return  # Exit if no members were successfully processed
 
     # Create a new CSV file with the updated data
@@ -1568,6 +1867,27 @@ async def dkp_add(ctx, dkp_value: int, *names: str):
 
     # Delete the original message containing the old CSV
     await message.delete()
+
+    # Check if logging is enabled
+    config_message = await find_csv_message(dkp_database_channel, "config.csv")
+    if config_message is not None:
+        # Download and parse the config.csv file
+        config_file = config_message.attachments[0]
+        config_data = await download_csv(config_file)
+
+        if config_data is not None:
+            # Find the "messagetoggle_dkpadd" and "whograntedtoggle_dkpadd" settings
+            log_toggle = next((row[1] for row in config_data if row[0] == "messagetoggle_dkpadd"), "true").lower()
+            who_granted_toggle = next((row[1] for row in config_data if row[0] == "whograntedtoggle_dkpadd"), "false").lower()
+
+            if log_toggle == "true":
+                # Log the DKP addition in the DKP log channel
+                log_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-keeping-log")
+                if log_channel:
+                    granted_by = f"{ctx.author.display_name} granted: " if who_granted_toggle == "true" else ""
+                    await log_channel.send(
+                        f"{granted_by}DKP added: {dkp_value} to:\n" + "\n".join(updated_members)
+                    )
 
     # Send confirmation to the channel where the command was issued
     await ctx.send(f"{dkp_value} DKP added to:\n" + "\n".join(updated_members))
@@ -1598,6 +1918,7 @@ async def dkp_add_current(ctx, dkp_value: int, *names: str):
     # Find the "Nicknames.csv" message in the "dkp-database" channel
     nickname_message = await find_csv_message(dkp_database_channel, "Nicknames.csv")
     nicknames = {}
+    mains = {}
 
     if nickname_message is not None:
         # Download and parse the Nicknames.csv file
@@ -1605,11 +1926,13 @@ async def dkp_add_current(ctx, dkp_value: int, *names: str):
         nickname_csv_data = await download_csv(nickname_csv_file)
 
         if nickname_csv_data is not None:
-            # Create a dictionary of usernames mapped to their nicknames
+            # Create dictionaries for nicknames and main entries
             for row in nickname_csv_data:
-                nickname_list = row[1].split(", ")
+                nickname_list = row[1].split(", ") if row[1] else []
                 for nick in nickname_list:
                     nicknames[nick.lower()] = row[0]  # Nickname -> Username mapping
+                if len(row) > 2 and row[2]:  # Check if a main is assigned
+                    mains[row[0]] = row[2]  # Username -> Main Nickname mapping
 
     # Download and parse the Balances CSV file
     csv_file = message.attachments[0]
@@ -1622,46 +1945,55 @@ async def dkp_add_current(ctx, dkp_value: int, *names: str):
     # Modify the data for each name (which could be a username, mention, or a nickname)
     updated_members = []
     for name in names:
-        member = None
+        target_name = None
 
         # Check if the name is a mention
         if name.startswith("<@") and name.endswith(">"):
             # Extract user ID from the mention format
             user_id = name.replace("<@", "").replace(">", "").replace("!", "")
             member = ctx.guild.get_member(int(user_id))
+            if member:
+                # Use the main nickname if it exists, otherwise the username
+                target_name = mains.get(member.name, member.name)
         else:
-            # If the name is not a mention, check if it's a nickname or username
-            member = discord.utils.get(ctx.guild.members, name=name)
+            # Check if it's a nickname
+            if name.lower() in nicknames:
+                target_name = name  # Use the nickname directly
+            else:
+                # Fallback: Check if it's a username
+                member = discord.utils.get(ctx.guild.members, name=name)
+                if member:
+                    target_name = mains.get(member.name, member.name)  # Default to main nickname if no main is set
 
-            # If no user by that name, check if it's a nickname
-            if member is None and name.lower() in nicknames:
-                real_username = nicknames[name.lower()]
-                member = discord.utils.get(ctx.guild.members, name=real_username)
-
-        if member is None:
+        if not target_name:
             await ctx.send(f"Could not find user or nickname: {name}")
             continue
 
-        # Update DKP for the found member
+        # Update DKP for the found target (either main nickname or username)
         updated = False
         current_balance = 0
+        lifetime_balance = 0
 
         for row in csv_data:
-            if row[0] == member.name:  # Match by username
-                current_balance = int(row[1]) + dkp_value  # Add DKP to current balance
+            if row[0] == target_name:  # Match by name (nickname or main nickname)
+                current_balance = int(row[1]) + dkp_value
+                lifetime_balance = int(row[2])  # Lifetime balance remains unchanged
                 row[1] = str(current_balance)  # Update only the current balance in the CSV
                 updated = True
                 break
 
-        # If the user was not found in the CSV, add them
+        # If the target was not found in the CSV, add them
         if not updated:
             current_balance = dkp_value
-            csv_data.append([member.name, str(current_balance), "0"])  # Add new user with lifetime DKP as 0
+            lifetime_balance = 0
+            csv_data.append([target_name, str(current_balance), str(lifetime_balance)])  # Add new entry
 
-        updated_members.append(f"{member.display_name} - current balance: {current_balance}")
+        updated_members.append(
+            f"{target_name} - current balance: {current_balance} - lifetime balance: {lifetime_balance}"
+        )
 
     if not updated_members:
-        await ctx.send("No users were found or processed for DKP addition.")
+        await ctx.send("No users or nicknames were found or processed for DKP addition.")
         return  # Exit if no members were successfully processed
 
     # Create a new CSV file with the updated data
@@ -1677,15 +2009,37 @@ async def dkp_add_current(ctx, dkp_value: int, *names: str):
     # Delete the original message containing the old CSV
     await message.delete()
 
+    # Check if logging is enabled
+    config_message = await find_csv_message(dkp_database_channel, "config.csv")
+    if config_message is not None:
+        # Download and parse the config.csv file
+        config_file = config_message.attachments[0]
+        config_data = await download_csv(config_file)
+
+        if config_data is not None:
+            # Find the "messagetoggle_dkpaddcurrent" and "whograntedtoggle_dkpaddcurrent" settings
+            log_toggle = next((row[1] for row in config_data if row[0] == "messagetoggle_dkpaddcurrent"), "true").lower()
+            who_granted_toggle = next((row[1] for row in config_data if row[0] == "whograntedtoggle_dkpaddcurrent"), "false").lower()
+
+            if log_toggle == "true":
+                # Log the DKP addition in the DKP log channel
+                log_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-keeping-log")
+                if log_channel:
+                    granted_by = f"{ctx.author.display_name} granted: " if who_granted_toggle == "true" else ""
+                    await log_channel.send(
+                        f"{granted_by}{dkp_value} DKP added to current balances of:\n" + "\n".join(updated_members)
+                    )
+
     # Send confirmation to the channel where the command was issued
     await ctx.send(f"{dkp_value} DKP added to current balances of:\n" + "\n".join(updated_members))
 
 # Removes DKP from just current, good for things like auctions
 @bot.command(name="dkpsubtract")
 async def dkp_subtract(ctx, dkp_value: int, *names: str):
-    result = await role_confirm_command(ctx,"dkpsubtract")
+    result = await role_confirm_command(ctx, "dkpsubtract")
     if result is None:
         return
+
     # Check if at least one member or nickname is provided
     if len(names) == 0:
         await ctx.send("Usage: !dkpsubtract <dkp_value> <user/nickname> [additional users/nicknames]")
@@ -1706,6 +2060,7 @@ async def dkp_subtract(ctx, dkp_value: int, *names: str):
     # Find the "Nicknames.csv" message in the "dkp-database" channel
     nickname_message = await find_csv_message(dkp_database_channel, "Nicknames.csv")
     nicknames = {}
+    mains = {}
 
     if nickname_message is not None:
         # Download and parse the Nicknames.csv file
@@ -1713,11 +2068,13 @@ async def dkp_subtract(ctx, dkp_value: int, *names: str):
         nickname_csv_data = await download_csv(nickname_csv_file)
 
         if nickname_csv_data is not None:
-            # Create a dictionary of usernames mapped to their nicknames
+            # Create dictionaries for nicknames and main entries
             for row in nickname_csv_data:
-                nickname_list = row[1].split(", ")
+                nickname_list = row[1].split(", ") if row[1] else []
                 for nick in nickname_list:
                     nicknames[nick.lower()] = row[0]  # Nickname -> Username mapping
+                if len(row) > 2 and row[2]:  # Check if a main is assigned
+                    mains[row[0]] = row[2]  # Username -> Main Nickname mapping
 
     # Download and parse the Balances CSV file
     csv_file = message.attachments[0]
@@ -1730,47 +2087,51 @@ async def dkp_subtract(ctx, dkp_value: int, *names: str):
     # Modify the data for each name (which could be a username, mention, or a nickname)
     updated_members = []
     for name in names:
-        member = None
+        target_name = None
 
         # Check if the name is a mention
         if name.startswith("<@") and name.endswith(">"):
             # Extract user ID from the mention format
             user_id = name.replace("<@", "").replace(">", "").replace("!", "")
             member = ctx.guild.get_member(int(user_id))
+            if member:
+                target_name = mains.get(member.name, member.name)  # Use the main nickname or username
         else:
-            # If the name is not a mention, check if it's a nickname or username
-            member = discord.utils.get(ctx.guild.members, name=name)
+            # Check if it's a nickname or a username directly
+            if name.lower() in nicknames:
+                target_name = name  # Use the nickname directly
+            else:
+                member = discord.utils.get(ctx.guild.members, name=name)
+                if member:
+                    target_name = mains.get(member.name, member.name)  # Use the main nickname or username
 
-            # If no user by that name, check if it's a nickname
-            if member is None and name.lower() in nicknames:
-                real_username = nicknames[name.lower()]
-                member = discord.utils.get(ctx.guild.members, name=real_username)
-
-        if member is None:
+        if not target_name:
             await ctx.send(f"Could not find user or nickname: {name}")
             continue
 
-        # Update DKP for the found member
+        # Update DKP for the found target (nickname or username)
         updated = False
         current_balance = 0
         lifetime_balance = 0
 
         for row in csv_data:
-            if row[0] == member.name:  # Match by username
+            if row[0] == target_name:  # Match by name
                 current_balance = int(row[1]) - dkp_value  # Subtract DKP from current balance
-                lifetime_balance = int(row[2])  # Lifetime balance remains the same
-                row[1] = str(current_balance)  # Update only the current balance in the CSV
+                lifetime_balance = int(row[2])  # Lifetime balance remains unchanged
+                row[1] = str(current_balance)  # Update current balance
                 updated = True
                 break
 
         if not updated:
-            await ctx.send(f"User {member.name} not found in the CSV.")
-            return
+            await ctx.send(f"{target_name} not found in the Balances_Database.csv.")
+            continue
 
-        updated_members.append(f"{member.display_name} - current balance: {current_balance} - lifetime balance: {lifetime_balance}")
+        updated_members.append(
+            f"{target_name} - current balance: {current_balance} - lifetime balance: {lifetime_balance}"
+        )
 
     if not updated_members:
-        await ctx.send("No users were found or processed for DKP deduction.")
+        await ctx.send("No users or nicknames were found or processed for DKP deduction.")
         return  # Exit if no members were successfully processed
 
     # Create a new CSV file with the updated data
@@ -1785,6 +2146,27 @@ async def dkp_subtract(ctx, dkp_value: int, *names: str):
 
     # Delete the original message containing the old CSV
     await message.delete()
+
+    # Check if logging is enabled
+    config_message = await find_csv_message(dkp_database_channel, "config.csv")
+    if config_message is not None:
+        # Download and parse the config.csv file
+        config_file = config_message.attachments[0]
+        config_data = await download_csv(config_file)
+
+        if config_data is not None:
+            # Find logging settings
+            log_toggle = next((row[1] for row in config_data if row[0] == "messagetoggle_dkpsubtract"), "true").lower()
+            who_granted_toggle = next((row[1] for row in config_data if row[0] == "whograntedtoggle_dkpsubtract"), "false").lower()
+
+            if log_toggle == "true":
+                # Log the DKP subtraction in the DKP log channel
+                log_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-keeping-log")
+                if log_channel:
+                    granted_by = f"{ctx.author.display_name} granted: " if who_granted_toggle == "true" else ""
+                    await log_channel.send(
+                        f"{granted_by}DKP deducted: {dkp_value} from:\n" + "\n".join(updated_members)
+                    )
 
     # Send confirmation to the channel where the command was issued
     await ctx.send(f"{dkp_value} DKP deducted from:\n" + "\n".join(updated_members))
@@ -1815,6 +2197,7 @@ async def dkp_subtract_lifetime(ctx, dkp_value: int, *names: str):
     # Find the "Nicknames.csv" message in the "dkp-database" channel
     nickname_message = await find_csv_message(dkp_database_channel, "Nicknames.csv")
     nicknames = {}
+    mains = {}
 
     if nickname_message is not None:
         # Download and parse the Nicknames.csv file
@@ -1822,11 +2205,13 @@ async def dkp_subtract_lifetime(ctx, dkp_value: int, *names: str):
         nickname_csv_data = await download_csv(nickname_csv_file)
 
         if nickname_csv_data is not None:
-            # Create a dictionary of usernames mapped to their nicknames
+            # Create dictionaries for nicknames and main entries
             for row in nickname_csv_data:
-                nickname_list = row[1].split(", ")
+                nickname_list = row[1].split(", ") if row[1] else []
                 for nick in nickname_list:
                     nicknames[nick.lower()] = row[0]  # Nickname -> Username mapping
+                if len(row) > 2 and row[2]:  # Check if a main is assigned
+                    mains[row[0]] = row[2]  # Username -> Main Nickname mapping
 
     # Download and parse the Balances CSV file
     csv_file = message.attachments[0]
@@ -1839,45 +2224,51 @@ async def dkp_subtract_lifetime(ctx, dkp_value: int, *names: str):
     # Modify the data for each name (which could be a username, mention, or a nickname)
     updated_members = []
     for name in names:
-        member = None
+        target_name = None
 
         # Check if the name is a mention
         if name.startswith("<@") and name.endswith(">"):
             # Extract user ID from the mention format
             user_id = name.replace("<@", "").replace(">", "").replace("!", "")
             member = ctx.guild.get_member(int(user_id))
+            if member:
+                target_name = mains.get(member.name, member.name)  # Use the main nickname or username
         else:
-            # If the name is not a mention, check if it's a nickname or username
-            member = discord.utils.get(ctx.guild.members, name=name)
+            # Check if it's a nickname or a username directly
+            if name.lower() in nicknames:
+                target_name = name  # Use the nickname directly
+            else:
+                member = discord.utils.get(ctx.guild.members, name=name)
+                if member:
+                    target_name = mains.get(member.name, member.name)  # Use the main nickname or username
 
-            # If no user by that name, check if it's a nickname
-            if member is None and name.lower() in nicknames:
-                real_username = nicknames[name.lower()]
-                member = discord.utils.get(ctx.guild.members, name=real_username)
-
-        if member is None:
+        if not target_name:
             await ctx.send(f"Could not find user or nickname: {name}")
             continue
 
-        # Update DKP for the found member
+        # Update DKP for the found target (nickname or username)
         updated = False
         lifetime_balance = 0
+        current_balance = 0
 
         for row in csv_data:
-            if row[0] == member.name:  # Match by username
-                lifetime_balance = max(0, int(row[2]) - dkp_value)  # Subtract DKP from lifetime balance, ensure it doesn't go negative
-                row[2] = str(lifetime_balance)  # Update only the lifetime balance in the CSV
+            if row[0] == target_name:  # Match by name
+                lifetime_balance = max(0, int(row[2]) - dkp_value)  # Subtract DKP from lifetime balance
+                current_balance = int(row[1])  # Current balance remains unchanged
+                row[2] = str(lifetime_balance)  # Update lifetime balance
                 updated = True
                 break
 
         if not updated:
-            await ctx.send(f"User {member.name} not found in the CSV.")
-            return
+            await ctx.send(f"{target_name} not found in the Balances_Database.csv.")
+            continue
 
-        updated_members.append(f"{member.display_name} - lifetime balance: {lifetime_balance}")
+        updated_members.append(
+            f"{target_name} - current balance: {current_balance} - lifetime balance: {lifetime_balance}"
+        )
 
     if not updated_members:
-        await ctx.send("No users were found or processed for DKP deduction.")
+        await ctx.send("No users or nicknames were found or processed for DKP deduction.")
         return  # Exit if no members were successfully processed
 
     # Create a new CSV file with the updated data
@@ -1893,14 +2284,34 @@ async def dkp_subtract_lifetime(ctx, dkp_value: int, *names: str):
     # Delete the original message containing the old CSV
     await message.delete()
 
+    # Check if logging is enabled
+    config_message = await find_csv_message(dkp_database_channel, "config.csv")
+    if config_message is not None:
+        # Download and parse the config.csv file
+        config_file = config_message.attachments[0]
+        config_data = await download_csv(config_file)
+
+        if config_data is not None:
+            # Find the logging settings
+            log_toggle = next((row[1] for row in config_data if row[0] == "messagetoggle_dkpsubtractlifetime"), "true").lower()
+            who_granted_toggle = next((row[1] for row in config_data if row[0] == "whograntedtoggle_dkpsubtractlifetime"), "false").lower()
+
+            if log_toggle == "true":
+                # Log the DKP subtraction in the DKP log channel
+                log_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-keeping-log")
+                if log_channel:
+                    granted_by = f"{ctx.author.display_name} granted: " if who_granted_toggle == "true" else ""
+                    await log_channel.send(
+                        f"{granted_by}DKP deducted from lifetime: {dkp_value} from:\n" + "\n".join(updated_members)
+                    )
+
     # Send confirmation to the channel where the command was issued
     await ctx.send(f"{dkp_value} DKP deducted from lifetime balances of:\n" + "\n".join(updated_members))
 
 # Removes DKP from both current and lifetime
 @bot.command(name="dkpsubtractboth")
 async def dkp_subtract_both(ctx, dkp_value: int, *names: str):
-
-    result = await role_confirm_command(ctx,"dkpadd")
+    result = await role_confirm_command(ctx, "dkpsubtractboth")
     if result is None:
         return
 
@@ -1924,6 +2335,7 @@ async def dkp_subtract_both(ctx, dkp_value: int, *names: str):
     # Find the "Nicknames.csv" message in the "dkp-database" channel
     nickname_message = await find_csv_message(dkp_database_channel, "Nicknames.csv")
     nicknames = {}
+    mains = {}
 
     if nickname_message is not None:
         # Download and parse the Nicknames.csv file
@@ -1931,11 +2343,13 @@ async def dkp_subtract_both(ctx, dkp_value: int, *names: str):
         nickname_csv_data = await download_csv(nickname_csv_file)
 
         if nickname_csv_data is not None:
-            # Create a dictionary of usernames mapped to their nicknames
+            # Create dictionaries for nicknames and main entries
             for row in nickname_csv_data:
-                nickname_list = row[1].split(", ")
+                nickname_list = row[1].split(", ") if row[1] else []
                 for nick in nickname_list:
                     nicknames[nick.lower()] = row[0]  # Nickname -> Username mapping
+                if len(row) > 2 and row[2]:  # Check if a main is assigned
+                    mains[row[0]] = row[2]  # Username -> Main Nickname mapping
 
     # Download and parse the Balances CSV file
     csv_file = message.attachments[0]
@@ -1948,48 +2362,52 @@ async def dkp_subtract_both(ctx, dkp_value: int, *names: str):
     # Modify the data for each name (which could be a username, mention, or a nickname)
     updated_members = []
     for name in names:
-        member = None
+        target_name = None
 
         # Check if the name is a mention
         if name.startswith("<@") and name.endswith(">"):
             # Extract user ID from the mention format
             user_id = name.replace("<@", "").replace(">", "").replace("!", "")
             member = ctx.guild.get_member(int(user_id))
+            if member:
+                target_name = mains.get(member.name, member.name)  # Use the main nickname or username
         else:
-            # If the name is not a mention, check if it's a nickname or username
-            member = discord.utils.get(ctx.guild.members, name=name)
+            # Use the nickname directly if found, otherwise fallback to username
+            if name.lower() in nicknames:
+                target_name = name  # Use the nickname directly
+            else:
+                member = discord.utils.get(ctx.guild.members, name=name)
+                if member:
+                    target_name = mains.get(member.name, member.name)  # Use the main nickname or username
 
-            # If no user by that name, check if it's a nickname
-            if member is None and name.lower() in nicknames:
-                real_username = nicknames[name.lower()]
-                member = discord.utils.get(ctx.guild.members, name=real_username)
-
-        if member is None:
+        if not target_name:
             await ctx.send(f"Could not find user or nickname: {name}")
             continue
 
-        # Update DKP for the found member
+        # Update DKP for the found target
         updated = False
         current_balance = 0
         lifetime_balance = 0
 
         for row in csv_data:
-            if row[0] == member.name:  # Match by username
-                current_balance = int(row[1]) - dkp_value  # Subtract from current balance
-                lifetime_balance = int(row[2]) - dkp_value  # Subtract from lifetime balance
+            if row[0] == target_name:  # Match by name
+                current_balance = max(0, int(row[1]) - dkp_value)  # Subtract from current balance
+                lifetime_balance = max(0, int(row[2]) - dkp_value)  # Subtract from lifetime balance
                 row[1] = str(current_balance)
                 row[2] = str(lifetime_balance)
                 updated = True
                 break
 
         if not updated:
-            await ctx.send(f"User {member.name} not found in the CSV.")
-            return
+            await ctx.send(f"{target_name} not found in the Balances_Database.csv.")
+            continue
 
-        updated_members.append(f"{member.display_name} - current balance: {current_balance} - lifetime balance: {lifetime_balance}")
+        updated_members.append(
+            f"{target_name} - current balance: {current_balance} - lifetime balance: {lifetime_balance}"
+        )
 
     if not updated_members:
-        await ctx.send("No users were found or processed for DKP deduction.")
+        await ctx.send("No users or nicknames were found or processed for DKP deduction.")
         return  # Exit if no members were successfully processed
 
     # Create a new CSV file with the updated data
@@ -2005,60 +2423,35 @@ async def dkp_subtract_both(ctx, dkp_value: int, *names: str):
     # Delete the original message containing the old CSV
     await message.delete()
 
+    # Check if logging is enabled
+    config_message = await find_csv_message(dkp_database_channel, "config.csv")
+    if config_message is not None:
+        # Download and parse the config.csv file
+        config_file = config_message.attachments[0]
+        config_data = await download_csv(config_file)
+
+        if config_data is not None:
+            # Find the logging settings
+            log_toggle = next((row[1] for row in config_data if row[0] == "messagetoggle_dkpsubtractboth"), "true").lower()
+            who_granted_toggle = next((row[1] for row in config_data if row[0] == "whograntedtoggle_dkpsubtractboth"), "false").lower()
+
+            if log_toggle == "true":
+                # Log the DKP subtraction in the DKP log channel
+                log_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-keeping-log")
+                if log_channel:
+                    granted_by = f"{ctx.author.display_name} granted: " if who_granted_toggle == "true" else ""
+                    await log_channel.send(
+                        f"{granted_by}DKP deducted from both current and lifetime: {dkp_value} from:\n" + "\n".join(updated_members)
+                    )
+
     # Send confirmation to the channel where the command was issued
     await ctx.send(f"{dkp_value} DKP deducted from:\n" + "\n".join(updated_members))
 
 @bot.command(name="bal")
 async def check_balance(ctx, name: str = None):
-
-    result = await role_confirm_command(ctx,"bal")
+    result = await role_confirm_command(ctx, "bal")
     if result is None:
         return
-
-    # If no name is provided, default to the user who invoked the command
-    if name is None:
-        member = ctx.author
-    else:
-        # Try to find the user by mention or nickname
-        # Check if the name is a mention
-        if name.startswith("<@") and name.endswith(">"):
-            # Extract user ID from the mention format
-            user_id = name.replace("<@", "").replace(">", "").replace("!", "")
-            member = ctx.guild.get_member(int(user_id))
-        else:
-            # If the name is not a mention, check if it's a nickname or username
-            member = discord.utils.get(ctx.guild.members, name=name)
-
-            # Fetch the DKP Database Channel to find nicknames
-            dkp_database_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-database")
-            if dkp_database_channel is None:
-                await ctx.send("The DKP database channel does not exist.")
-                return
-
-            # Find the "Nicknames.csv" message in the "dkp-database" channel
-            nickname_message = await find_csv_message(dkp_database_channel, "Nicknames.csv")
-            nicknames = {}
-
-            if nickname_message is not None:
-                # Download and parse the Nicknames.csv file
-                nickname_csv_file = nickname_message.attachments[0]
-                nickname_csv_data = await download_csv(nickname_csv_file)
-
-                if nickname_csv_data is not None:
-                    # Create a dictionary of usernames mapped to their nicknames
-                    for row in nickname_csv_data:
-                        nickname_list = row[1].split(", ")
-                        for nick in nickname_list:
-                            nicknames[nick.lower()] = row[0]  # Nickname -> Username mapping
-
-                # If the name is a nickname, get the actual username
-                if name.lower() in nicknames:
-                    member_name = nicknames[name.lower()]
-                    member = discord.utils.get(ctx.guild.members, name=member_name)
-
-        if member is None:
-            await ctx.send(f"Could not find user or nickname: {name}")
-            return
 
     # Fetch the DKP Database Channel
     dkp_database_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-database")
@@ -2066,58 +2459,103 @@ async def check_balance(ctx, name: str = None):
         await ctx.send("The DKP database channel does not exist.")
         return
 
-    # Find the "Balances_Database.csv" message in the "dkp-database" channel
-    message = await find_csv_message(dkp_database_channel, "Balances_Database.csv")
-    if message is None:
+    # Load nicknames and main mappings
+    nickname_message = await find_csv_message(dkp_database_channel, "Nicknames.csv")
+    nicknames = {}
+    mains = {}
+
+    if nickname_message:
+        nickname_csv_data = await download_csv(nickname_message.attachments[0])
+        if nickname_csv_data:
+            for row in nickname_csv_data:
+                nickname_list = row[1].split(", ") if row[1] else []
+                for nick in nickname_list:
+                    nicknames[nick.lower()] = row[0]  # Nickname -> Username mapping
+                if len(row) > 2 and row[2]:  # Check if a main is assigned
+                    mains[row[0]] = row[2]  # Username -> Main Nickname mapping
+
+    # Determine the user or nickname to check
+    target_name = None
+    user_name = None
+
+    if not name:  # No input means check the invoker
+        user_name = ctx.author.name
+    elif name.startswith("<@") and name.endswith(">"):  # Mentioned user
+        user_id = name.replace("<@", "").replace(">", "").replace("!", "")
+        member = ctx.guild.get_member(int(user_id))
+        user_name = member.name if member else None
+    elif name.lower() in nicknames:  # Provided nickname
+        target_name = name
+    else:  # Username or invalid input
+        member = discord.utils.get(ctx.guild.members, name=name)
+        user_name = member.name if member else None
+
+    if user_name:
+        target_name = mains.get(user_name, user_name)
+
+    if not target_name:
+        await ctx.send(f"Could not find user or nickname: {name if name else ctx.author.display_name}")
+        return
+
+    # Adjust for account selection if multiple options exist
+    user_nicknames = [
+        nick for nick, user in nicknames.items() if user == user_name
+    ]
+    if user_name and mains.get(user_name) in user_nicknames:
+        user_nicknames.remove(mains[user_name])
+
+    if len(user_nicknames) > 1 or (len(user_nicknames) == 1 and user_name):
+        options = [user_name] + user_nicknames if user_name not in mains.values() else user_nicknames
+
+        # Create selection buttons
+        view = discord.ui.View(timeout=30)
+        for option in options:
+            button = discord.ui.Button(label=option, custom_id=f"bal_{option}")
+            view.add_item(button)
+
+        msg = await ctx.send(f"{ctx.author.mention}, select the account to check the balance for:", view=view)
+
+        async def button_callback(interaction):
+            if interaction.user != ctx.author:
+                await interaction.response.send_message("You cannot select this account.", ephemeral=True)
+                return
+
+            selected_name = interaction.data["custom_id"].split("_", 1)[1]
+            await display_balance(ctx, selected_name, dkp_database_channel)
+            await msg.delete()
+
+        for button in view.children:
+            button.callback = button_callback
+
+        await view.wait()
+        if not view.is_finished:
+            await msg.edit(content="Timeout: No selection was made.", view=None)
+        return
+
+    # Display balance directly if no selection is needed
+    await display_balance(ctx, target_name, dkp_database_channel)
+
+async def display_balance(ctx, target_name, dkp_database_channel):
+    # Fetch balances from Balances_Database.csv
+    balances_message = await find_csv_message(dkp_database_channel, "Balances_Database.csv")
+    if not balances_message:
         await ctx.send("Could not find the Balances_Database.csv file.")
         return
 
-    # Download and parse the CSV file
-    csv_file = message.attachments[0]
-    csv_data = await download_csv(csv_file)
-
-    if csv_data is None:
+    csv_data = await download_csv(balances_message.attachments[0])
+    if not csv_data:
         await ctx.send("Could not download or parse the Balances_Database.csv file.")
         return
 
-    # Search for the user's data in the CSV
-    found_user = False
-    current_balance = 0
-    lifetime_balance = 0
+    # Find the target's balance
+    current_balance, lifetime_balance = 0, 0
     for row in csv_data:
-        if row[0] == member.name:  # Match by username
-            current_balance = row[1]
-            lifetime_balance = row[2]
-            found_user = True
+        if row[0].lower() == target_name.lower():
+            current_balance, lifetime_balance = int(row[1]), int(row[2])
             break
 
-    # If the user was not found in the CSV, add them with default values
-    if not found_user:
-        current_balance = 0
-        lifetime_balance = 0
-        csv_data.append([member.name, str(current_balance), str(lifetime_balance)])  # Add new user
+    await ctx.send(f"{target_name} has {current_balance} current DKP and {lifetime_balance} lifetime DKP.")
 
-        # Create a new CSV file with the updated data
-        output = io.StringIO()
-        writer = csv.writer(output)
-        writer.writerows(csv_data)
-        output.seek(0)
-
-        # Send the updated CSV to the "dkp-database" channel
-        new_csv_file = discord.File(io.BytesIO(output.getvalue().encode()), filename="Balances_Database.csv")
-        await dkp_database_channel.send(file=new_csv_file)
-
-        # Delete the original message containing the old CSV
-        await message.delete()
-
-    # Send the user's current and lifetime DKP
-    await ctx.send(f"{member.display_name} has {current_balance} current DKP and {lifetime_balance} lifetime DKP.")
-
-# Error handler for BadArgument
-@check_balance.error
-async def check_balance_error(ctx, error):
-    if isinstance(error, commands.BadArgument):
-        await ctx.send("Usage: !bal [user/nickname]")
 
 # Command to set the DKP value, restricted to "DKP Keeper" role
 @bot.command(name="setdkp")
@@ -2178,9 +2616,8 @@ async def set_dkp_value(ctx, boss: str, dkp_value: int):
     await send_dkp_values_embed(ctx.guild)
 
 @bot.command(name="nick")
-async def set_nickname(ctx, member: discord.Member, nickname: str):
-
-    result = await role_confirm_command(ctx,"nick")
+async def set_nickname(ctx, member: discord.Member, nickname: str = None):
+    result = await role_confirm_command(ctx, "nick")
     if result is None:
         return
 
@@ -2198,13 +2635,13 @@ async def set_nickname(ctx, member: discord.Member, nickname: str):
         # Create a CSV with header if it doesn't exist
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["Username", "Nicknames"])  # Header
+        writer.writerow(["Username", "Nicknames", "Main"])  # Header with "Main"
         output.seek(0)
         nicknames_file = discord.File(io.BytesIO(output.getvalue().encode()), filename="Nicknames.csv")
         await dkp_database_channel.send(file=nicknames_file)
         message = await find_csv_message(dkp_database_channel, "Nicknames.csv")  # Reload the message
 
-    # Download and parse the CSV file
+    # Download and parse the Nicknames.csv file
     csv_file = message.attachments[0]
     csv_data = await download_csv(csv_file)
 
@@ -2212,13 +2649,69 @@ async def set_nickname(ctx, member: discord.Member, nickname: str):
         await ctx.send("Could not download or parse the Nicknames.csv file.")
         return
 
+    # If no nickname is provided, list the user's existing nicknames and main
+    if nickname is None:
+        for row in csv_data:
+            if row[0] == member.name:  # Match by username
+                existing_nicknames = row[1].split(", ") if row[1] else []
+                main_nickname = row[2] if len(row) > 2 and row[2] else "None"
+                if existing_nicknames:
+                    await ctx.send(
+                        f"{member.display_name} has the following nicknames: {', '.join(existing_nicknames)}\n"
+                        f"Main nickname: {main_nickname}"
+                    )
+                else:
+                    await ctx.send(f"{member.display_name} has no nicknames.")
+                return
+        await ctx.send(f"{member.display_name} has no nicknames.")
+        return
+
     # Check for duplicate nicknames across all users
     for row in csv_data:
-        if nickname in row[1].split(", "):
+        if nickname.lower() in [nick.lower() for nick in row[1].split(", ")]:
             if row[0] == member.name:
                 await ctx.send(f"{member.display_name} already has the nickname '{nickname}'.")
             else:
                 await ctx.send(f"The nickname '{nickname}' is already taken by {row[0]}.")
+            return
+
+    # Find the user's existing nicknames
+    current_nicknames = []
+    for row in csv_data:
+        if row[0] == member.name:  # Match by username
+            current_nicknames = row[1].split(", ") if row[1] else []
+            break
+
+    # Read the double-check toggle from the config
+    config_message = await find_csv_message(dkp_database_channel, "config.csv")
+    config_data = await download_csv(config_message.attachments[0])
+    double_check = next(
+        (row[1].lower() == "true" for row in config_data if row[0] == "nick_doublecheck"), False
+    )
+
+    # Perform double-check if enabled
+    if double_check:
+        confirmation_msg = await ctx.send(
+            f"Are you sure you want to add the nickname '{nickname}' for {member.display_name}? "
+            f"Current nicknames: {', '.join(current_nicknames) if current_nicknames else 'None'}"
+        )
+        await confirmation_msg.add_reaction("✅")  # Checkmark
+        await confirmation_msg.add_reaction("❌")  # Cross
+
+        def check_reaction(reaction, user):
+            return (
+                user == ctx.author
+                and reaction.message.id == confirmation_msg.id
+                and str(reaction.emoji) in ["✅", "❌"]
+            )
+
+        try:
+            reaction, user = await bot.wait_for("reaction_add", timeout=30.0, check=check_reaction)
+            if str(reaction.emoji) == "❌":
+                await ctx.send("Nickname addition canceled.")
+                return
+        except asyncio.TimeoutError:
+            await ctx.send("You took too long to respond. Nickname addition canceled.")
             return
 
     # Modify or add the nickname for the specific user
@@ -2226,7 +2719,7 @@ async def set_nickname(ctx, member: discord.Member, nickname: str):
     updated = False
     for row in csv_data:
         if row[0] == member.name:  # Match by username
-            existing_nicknames = row[1].split(", ")
+            existing_nicknames = row[1].split(", ") if row[1] else []
             if nickname not in existing_nicknames:
                 existing_nicknames.append(nickname)  # Append the new nickname
                 row[1] = ", ".join(existing_nicknames)  # Update the row with multiple nicknames
@@ -2236,7 +2729,7 @@ async def set_nickname(ctx, member: discord.Member, nickname: str):
 
     # If the user was not found, add them to the CSV with the new nickname
     if not updated:
-        csv_data.append([member.name, nickname])  # Add new user with nickname
+        csv_data.append([member.name, nickname, ""])  # Add new user with nickname and no main
         nickname_added = True  # Indicate that a nickname was added
 
     # Create a new CSV file with the updated data
@@ -2245,12 +2738,32 @@ async def set_nickname(ctx, member: discord.Member, nickname: str):
     writer.writerows(csv_data)
     output.seek(0)
 
-    # Send the updated CSV to the "dkp-database" channel
+    # Send the updated Nicknames.csv to the "dkp-database" channel
     new_csv_file = discord.File(io.BytesIO(output.getvalue().encode()), filename="Nicknames.csv")
     await dkp_database_channel.send(file=new_csv_file)
 
     # Delete the original message containing the old CSV
     await message.delete()
+
+    # Update Balances_Database.csv with the new nickname
+    balances_message = await find_csv_message(dkp_database_channel, "Balances_Database.csv")
+    if balances_message:
+        balances_csv_file = balances_message.attachments[0]
+        balances_csv_data = await download_csv(balances_csv_file)
+
+        # Add a new row for the nickname
+        balances_csv_data.append([nickname, "0", "0"])
+
+        # Create and upload the updated Balances_Database.csv
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerows(balances_csv_data)
+        output.seek(0)
+        updated_balances_file = discord.File(io.BytesIO(output.getvalue().encode()), filename="Balances_Database.csv")
+        await dkp_database_channel.send(file=updated_balances_file)
+
+        # Delete the old Balances_Database.csv message
+        await balances_message.delete()
 
     # Send confirmation if nickname was added
     if nickname_added:
@@ -2259,9 +2772,8 @@ async def set_nickname(ctx, member: discord.Member, nickname: str):
         await ctx.send(f"Nickname '{nickname}' was already set for {member.display_name}.")
 
 @bot.command(name="nickdelete")
-async def delete_nickname(ctx, member: discord.Member, nickname: str):
-
-    result = await role_confirm_command(ctx,"nickdelete")
+async def delete_nickname(ctx, member: discord.Member, nickname: str = None):
+    result = await role_confirm_command(ctx, "nickdelete")
     if result is None:
         return
 
@@ -2277,20 +2789,122 @@ async def delete_nickname(ctx, member: discord.Member, nickname: str):
         await ctx.send("Could not find the Nicknames.csv file.")
         return
 
-    # Download and parse the CSV file
+    # Download and parse the Nicknames.csv file
     csv_file = message.attachments[0]
     csv_data = await download_csv(csv_file)
+
     if csv_data is None:
         await ctx.send("Could not download or parse the Nicknames.csv file.")
         return
 
-    # Modify or delete the nickname
+    # Read the double-check toggle from the config
+    config_message = await find_csv_message(dkp_database_channel, "config.csv")
+    config_data = await download_csv(config_message.attachments[0])
+    double_check = next(
+        (row[1].lower() == "true" for row in config_data if row[0] == "nickdelete_doublecheck"), False
+    )
+
+    # List all nicknames for the member
+    user_nicknames = []
+    for row in csv_data:
+        if row[0] == member.name:
+            user_nicknames = row[1].split(", ")
+            break
+
+    if not user_nicknames:
+        await ctx.send(f"{member.display_name} does not have any nicknames to delete.")
+        return
+
+    # If no specific nickname is provided, send buttons for each nickname
+    if nickname is None:
+        view = View(timeout=30)  # Timeout for the buttons
+
+        for nick in user_nicknames:
+            button = Button(label=f"Delete '{nick}'", custom_id=f"delete_{nick}")
+
+            # Use a closure to bind the current value of `nick` to the callback
+            async def button_callback(interaction, nickname_to_delete=nick):
+                if interaction.user != ctx.author:
+                    await interaction.response.send_message("You cannot press this button.", ephemeral=True)
+                    return
+
+                if double_check:
+                    await send_double_check(ctx, member, nickname_to_delete, csv_data, message, dkp_database_channel)
+                else:
+                    deletion_successful = await handle_nickname_deletion(
+                        ctx, member, nickname_to_delete, csv_data, message, dkp_database_channel
+                    )
+                    if deletion_successful:
+                        await interaction.response.send_message(
+                            f"Nickname '{nickname_to_delete}' has been deleted for {member.display_name}."
+                        )
+                view.stop()
+
+            button.callback = button_callback
+            view.add_item(button)
+
+        await ctx.send(
+            f"Please select the nickname you want to delete from {member.display_name}'s list of nicknames:",
+            view=view,
+        )
+        return
+
+    # Otherwise, delete the provided nickname directly with or without double-check
+    if double_check:
+        await send_double_check(ctx, member, nickname, csv_data, message, dkp_database_channel)
+    else:
+        deletion_successful = await handle_nickname_deletion(
+            ctx, member, nickname, csv_data, message, dkp_database_channel
+        )
+        if deletion_successful:
+            await ctx.send(f"Nickname '{nickname}' has been deleted for {member.display_name}.")
+        else:
+            await ctx.send(f"Nickname '{nickname}' was not found for {member.display_name}.")
+
+async def send_double_check(ctx, member, nickname, csv_data, message, dkp_database_channel):
+    """Send a double-check message with reactions."""
+    confirmation_msg = await ctx.send(
+        f"Are you sure you want to remove the nickname '{nickname}' from {member.display_name}? "
+        f"This will clear all DKP data associated with '{nickname}'. This cannot be reversed."
+    )
+    await confirmation_msg.add_reaction("✅")  # Checkmark
+    await confirmation_msg.add_reaction("❌")  # Cross
+
+    def check_reaction(reaction, user):
+        return (
+            user == ctx.author
+            and reaction.message.id == confirmation_msg.id
+            and str(reaction.emoji) in ["✅", "❌"]
+        )
+
+    try:
+        reaction, user = await bot.wait_for("reaction_add", timeout=30.0, check=check_reaction)
+
+        if str(reaction.emoji) == "✅":
+            deletion_successful = await handle_nickname_deletion(
+                ctx, member, nickname, csv_data, message, dkp_database_channel
+            )
+            if deletion_successful:
+                await ctx.send(f"Nickname '{nickname}' has been deleted for {member.display_name}.")
+            else:
+                await ctx.send(f"Nickname '{nickname}' was not found for {member.display_name}.")
+        else:
+            await ctx.send(f"Deletion of nickname '{nickname}' has been canceled.")
+    except asyncio.TimeoutError:
+        await ctx.send("You took too long to respond. Nickname deletion canceled.")
+
+async def handle_nickname_deletion(ctx, member, nickname, csv_data, message, dkp_database_channel):
+    """Handle deletion of nickname from files."""
     updated = False
+    nickname_lower = nickname.lower()
     for row in csv_data:
         if row[0] == member.name:
             existing_nicknames = row[1].split(", ")
-            if nickname in existing_nicknames:
-                existing_nicknames.remove(nickname)  # Remove the nickname
+            existing_nicknames_lower = [nick.lower() for nick in existing_nicknames]
+
+            if nickname_lower in existing_nicknames_lower:
+                index_to_remove = existing_nicknames_lower.index(nickname_lower)
+                del existing_nicknames[index_to_remove]  # Remove the nickname
                 if existing_nicknames:
                     row[1] = ", ".join(existing_nicknames)  # Update with remaining nicknames
                 else:
@@ -2299,157 +2913,158 @@ async def delete_nickname(ctx, member: discord.Member, nickname: str):
                 break
 
     if not updated:
-        await ctx.send(f"Nickname '{nickname}' not found for {member.display_name}.")
+        return False
+
+    # Create a new CSV file with the updated nicknames data
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerows(csv_data)
+    output.seek(0)
+
+    # Send the updated Nicknames.csv to the "dkp-database" channel
+    new_csv_file = discord.File(io.BytesIO(output.getvalue().encode()), filename="Nicknames.csv")
+    await dkp_database_channel.send(file=new_csv_file)
+
+    # Delete the original message containing the old Nicknames.csv
+    await message.delete()
+
+    # Update the Balances_Database.csv to remove the nickname entry
+    balances_message = await find_csv_message(dkp_database_channel, "Balances_Database.csv")
+    if balances_message:
+        balances_csv_file = balances_message.attachments[0]
+        balances_csv_data = await download_csv(balances_csv_file)
+
+        # Remove the row corresponding to the deleted nickname
+        balances_csv_data = [row for row in balances_csv_data if row[0].lower() != nickname_lower]
+
+        # Create and upload the updated Balances_Database.csv
+        balances_output = io.StringIO()
+        writer = csv.writer(balances_output)
+        writer.writerows(balances_csv_data)
+        balances_output.seek(0)
+        updated_balances_file = discord.File(io.BytesIO(balances_output.getvalue().encode()), filename="Balances_Database.csv")
+        await dkp_database_channel.send(file=updated_balances_file)
+
+        # Delete the original Balances_Database.csv message
+        await balances_message.delete()
+
+    return True
+
+@bot.command(name="setmain")
+async def set_main(ctx, *args):
+    result = await role_confirm_command(ctx, "setmain")
+    if result is None:
         return
 
+    member = ctx.author
+    nickname = None
+
+    # Determine if the first argument is a member or a nickname
+    if len(args) > 0:
+        try:
+            # Attempt to resolve the first argument as a member
+            member = await commands.MemberConverter().convert(ctx, args[0])
+            # If a second argument exists, treat it as a nickname
+            if len(args) > 1:
+                nickname = args[1]
+        except commands.MemberNotFound:
+            # If the first argument isn't a member, treat it as a nickname
+            nickname = args[0]
+
+    # Fetch the DKP Database Channel
+    dkp_database_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-database")
+    if dkp_database_channel is None:
+        await ctx.send("The DKP database channel does not exist.")
+        return
+
+    # Find the "Nicknames.csv" message in the "dkp-database" channel
+    message = await find_csv_message(dkp_database_channel, "Nicknames.csv")
+    if message is None:
+        await ctx.send("Could not find the Nicknames.csv file. Please create nicknames using !nick first.")
+        return
+
+    # Download and parse the Nicknames.csv file
+    csv_file = message.attachments[0]
+    csv_data = await download_csv(csv_file)
+
+    if csv_data is None:
+        await ctx.send("Could not download or parse the Nicknames.csv file.")
+        return
+
+    # Get the user's existing nicknames
+    user_row = next((row for row in csv_data if row[0] == member.name), None)
+    if user_row:
+        existing_nicknames = user_row[1].split(", ") if user_row[1] else []
+    else:
+        existing_nicknames = []
+
+    # If no nicknames exist for the user
+    if not existing_nicknames:
+        await ctx.send(f"{member.display_name} has no nicknames. Please create one with `!nick` or specify a main nickname with `!setmain @user nickname`.")
+        return
+
+    # If a specific nickname is provided
+    if nickname:
+        if nickname in existing_nicknames:
+            # Update the main nickname in the CSV
+            user_row[2] = nickname  # Update the "Main" column
+            await update_csv_and_confirm(ctx, csv_data, dkp_database_channel, message, f"{nickname} is now the main nickname for {member.display_name}.")
+        else:
+            await ctx.send(f"{nickname} is not a valid nickname for {member.display_name}.")
+        return
+
+    # If no specific nickname is provided, display buttons for selection
+    view = discord.ui.View(timeout=30)
+    interaction_resolved = False  # Flag to track if an interaction has been handled
+
+    for nick in existing_nicknames:
+        button = discord.ui.Button(label=nick, custom_id=f"setmain_{nick}")
+        view.add_item(button)
+
+    msg = await ctx.send(f"Select the main nickname for {member.display_name}:", view=view)
+
+    async def button_callback(interaction):
+        nonlocal interaction_resolved
+        if interaction.user != ctx.author:
+            await interaction.response.send_message("You are not authorized to select this nickname.", ephemeral=True)
+            return
+
+        pressed_nickname = interaction.data["custom_id"].split("_")[1]  # Extract nickname from custom_id
+        user_row[2] = pressed_nickname  # Update the "Main" column
+        await update_csv_and_confirm(ctx, csv_data, dkp_database_channel, message, f"{pressed_nickname} is now the main nickname for {member.display_name}.")
+        interaction_resolved = True
+        await msg.delete()  # Delete the original embed
+        #await interaction.response.send_message(f"{pressed_nickname} is now the main nickname for {member.display_name}.")
+        view.stop()
+
+    for button in view.children:
+        button.callback = button_callback
+
+    # Wait for the view to timeout
+    await view.wait()
+
+    # If the user does not respond
+    if not interaction_resolved:
+        await msg.edit(content="Timeout: No selection was made.", view=None)
+
+
+# Helper function to update the CSV and send a confirmation message
+async def update_csv_and_confirm(ctx, csv_data, dkp_database_channel, old_message, confirmation_msg):
     # Create a new CSV file with the updated data
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerows(csv_data)
     output.seek(0)
 
-    # Send the updated CSV to the "dkp-database" channel
+    # Send the updated Nicknames.csv to the "dkp-database" channel
     new_csv_file = discord.File(io.BytesIO(output.getvalue().encode()), filename="Nicknames.csv")
     await dkp_database_channel.send(file=new_csv_file)
 
     # Delete the original message containing the old CSV
-    await message.delete()
+    await old_message.delete()
 
-    # Send confirmation to the channel where the command was issued
-    await ctx.send(f"Nickname '{nickname}' has been deleted for {member.display_name}.")
-
-async def handle_attendance_command(message):
-    # Load valid commands dynamically from the Boss_DKP_Values.csv
-    valid_commands = await load_valid_commands()
-
-    # Check if the user has the DKP Keeper role
-    #role = discord.utils.get(message.author.roles, name="DKP Keeper")
-    #if role is None:
-    #    await message.channel.send("You need the DKP Keeper role to use this command.")
-    #    return
-
-    # Extract the boss command and users from message content
-    parts = message.content.split(" ")
-    boss_command = parts[0][2:]  # Extract the boss part (e.g., 155/4)
-    names = parts[1:]  # Get the remaining parts as names
-
-    if len(names) == 0:
-        await message.channel.send("Please mention at least one user or nickname.")
-        return
-
-    # Check if the boss is a valid command
-    if f"!a{boss_command}".lower() not in valid_commands:
-        await message.channel.send(f"Could not find DKP value for {boss_command}.")
-        return
-
-    # Find the DKP value for the boss from the CSV
-    dkp_value = await get_dkp_value_for_boss(boss_command, message.guild)
-    if dkp_value is None:
-        await message.channel.send(f"Could not find DKP value for {boss_command}.")
-        return
-
-    # Fetch the DKP Database Channel
-    dkp_database_channel = discord.utils.get(message.guild.text_channels, name="dkp-database")
-    if dkp_database_channel is None:
-        await message.channel.send("The DKP database channel does not exist.")
-        return
-
-    # Find the "Balances_Database.csv" message in the "dkp-database" channel
-    balance_message = await find_csv_message(dkp_database_channel, "Balances_Database.csv")
-    if balance_message is None:
-        await message.channel.send("Could not find the Balances_Database.csv file.")
-        return
-
-    # Find the "Nicknames.csv" message in the "dkp-database" channel
-    nickname_message = await find_csv_message(dkp_database_channel, "Nicknames.csv")
-    nicknames = {}
-
-    if nickname_message is not None:
-        # Download and parse the Nicknames.csv file
-        nickname_csv_file = nickname_message.attachments[0]
-        nickname_csv_data = await download_csv(nickname_csv_file)
-
-        if nickname_csv_data is not None:
-            # Create a dictionary of nicknames mapped to their usernames
-            for row in nickname_csv_data:
-                nickname_list = row[1].split(", ")
-                for nick in nickname_list:
-                    nicknames[nick.lower()] = row[0]  # Nickname -> Username mapping
-
-    # Download and parse the Balances CSV file
-    balance_csv_file = balance_message.attachments[0]
-    balance_csv_data = await download_csv(balance_csv_file)
-
-    if balance_csv_data is None:
-        await message.channel.send("Could not download or parse the Balances_Database.csv file.")
-        return
-
-    # Modify the data for each name (which could be a username, mention, or a nickname)
-    updated_members = []
-    for name in names:
-        member = None
-
-        # Check if the name is a mention
-        if name.startswith("<@") and name.endswith(">"):
-            # Extract user ID from the mention format
-            user_id = name.replace("<@", "").replace(">", "").replace("!", "")
-            member = message.guild.get_member(int(user_id))
-        else:
-            # If the name is not a mention, check if it's a nickname or username
-            member = discord.utils.get(message.guild.members, name=name)
-
-            # If no user by that name, check if it's a nickname
-            if member is None and name.lower() in nicknames:
-                real_username = nicknames[name.lower()]
-                member = discord.utils.get(message.guild.members, name=real_username)
-
-        if member is None:
-            await message.channel.send(f"Could not find user or nickname: {name}")
-            continue
-
-        # Update DKP for the found member
-        updated = False
-        for row in balance_csv_data:
-            if row[0] == member.name:  # Match by username
-                current_balance = int(row[1]) + dkp_value
-                lifetime_balance = int(row[2]) + dkp_value
-                row[1] = str(current_balance)
-                row[2] = str(lifetime_balance)
-                updated = True
-                break
-
-        # If the user was not found, add them to the CSV
-        if not updated:
-            balance_csv_data.append([member.name, str(dkp_value), str(dkp_value)])  # Add new user
-
-        updated_members.append(f"{member.display_name}")
-
-    if not updated_members:
-        await message.channel.send("No users were found or processed for attendance.")
-        return  # Exit if no members were successfully processed
-
-    # Create a new CSV file with the updated data
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerows(balance_csv_data)
-    output.seek(0)
-
-    # Send the updated CSV to the "dkp-database" channel
-    new_csv_file = discord.File(io.BytesIO(output.getvalue().encode()), filename="Balances_Database.csv")
-    await dkp_database_channel.send(file=new_csv_file)
-
-    # Delete the original message containing the old CSV
-    await balance_message.delete()
-
-    # Log the attendance in the DKP log channel
-    log_channel = discord.utils.get(message.guild.text_channels, name="dkp-keeping-log")
-    if log_channel:
-        await log_channel.send(f"{', '.join(updated_members)} have attended {boss_command} and earned {dkp_value} DKP.")
-    else:
-        print(f"Error: 'dkp-keeping-log' channel not found in guild {message.guild.name}")
-
-    # Send confirmation to the channel where the command was issued
-    await message.channel.send(f"{dkp_value} DKP added for attending {boss_command} to:\n" + "\n".join(updated_members))
+    # Send confirmation
+    await ctx.send(confirmation_msg)
 
 #timer shit
 
@@ -2706,25 +3321,100 @@ async def cancel_timer_logic(boss_name, guild):
     await update_timers_embed_if_active(guild)
 
 @bot.command(name="cancel")
-async def cancel_timer(ctx, boss_name: str):
-
-    result = await role_confirm_command(ctx,"cancel")
+async def cancel_timer(ctx, boss_name: str = None):
+    result = await role_confirm_command(ctx, "cancel")
     if result is None:
         return
 
-    # Add a prefix to match the format used in the dictionary (e.g., !155)
-    # Convert the boss_name to lowercase to make the command case-insensitive
-    boss_command = f"!{boss_name.lower()}"
+    # Handle the case where no boss name is provided
+    if boss_name is None:
+        if not active_boss_timers:
+            await ctx.send("There are no currently running boss timers.")
+            return
 
-    # Check if the boss timer is active
+        # Paginate running timers
+        timers_per_page = 23
+        running_timers = list(active_boss_timers.keys())
+        pages = [running_timers[i:i + timers_per_page] for i in range(0, len(running_timers), timers_per_page)]
+
+        async def create_timer_page(page_index):
+            embed = discord.Embed(
+                title=f"Active Boss Timers (Page {page_index + 1}/{len(pages)})",
+                description="Click a button to cancel a timer for a specific boss.",
+                color=0x00ff00
+            )
+            view = discord.ui.View(timeout=120)
+
+            # Add buttons for each timer on the page
+            for boss_timer in pages[page_index]:
+                button = discord.ui.Button(label=boss_timer, custom_id=f"cancel_{boss_timer}")
+                view.add_item(button)
+
+            # Add navigation buttons if there are multiple pages
+            if len(pages) > 1:
+                if page_index > 0:
+                    view.add_item(discord.ui.Button(label="Previous", custom_id="previous_page", style=discord.ButtonStyle.secondary))
+                if page_index < len(pages) - 1:
+                    view.add_item(discord.ui.Button(label="Next", custom_id="next_page", style=discord.ButtonStyle.secondary))
+
+            return embed, view
+
+        current_page = 0
+        embed, view = await create_timer_page(current_page)
+        message = await ctx.send(embed=embed, view=view)
+
+        # Interaction handler for the buttons
+        @bot.event
+        async def on_interaction(interaction: discord.Interaction):
+            nonlocal current_page
+
+            if not interaction.data or "custom_id" not in interaction.data:
+                return
+
+            custom_id = interaction.data["custom_id"]
+
+            if interaction.user != ctx.author:
+                await interaction.response.send_message("You cannot interact with this menu.", ephemeral=True)
+                return
+
+            await interaction.response.defer()
+
+            if custom_id.startswith("cancel_"):
+                boss_timer = custom_id[len("cancel_"):]
+                if boss_timer in active_boss_timers:
+                    await cancel_timer_logic(boss_timer, ctx.guild)
+                    await interaction.followup.send(f"The timer for boss {boss_timer} has been canceled.")
+                else:
+                    await interaction.followup.send(f"The timer for boss {boss_timer} is no longer active.")
+
+                # Update the embed if timers are still active
+                if active_boss_timers:
+                    embed, view = await create_timer_page(current_page)
+                    await interaction.edit_original_response(embed=embed, view=view)
+                else:
+                    await interaction.edit_original_response(content="All timers have been canceled.", embed=None, view=None)
+
+            elif custom_id == "previous_page":
+                if current_page > 0:
+                    current_page -= 1
+                    embed, view = await create_timer_page(current_page)
+                    await interaction.edit_original_response(embed=embed, view=view)
+
+            elif custom_id == "next_page":
+                if current_page < len(pages) - 1:
+                    current_page += 1
+                    embed, view = await create_timer_page(current_page)
+                    await interaction.edit_original_response(embed=embed, view=view)
+
+        return
+
+    # Handle the case where a boss name is provided
+    boss_command = f"!{boss_name.lower()}"
     if boss_command not in active_boss_timers:
         await ctx.send(f"There is no active timer for boss {boss_name.lower()}.")
         return
 
-    # Cancel the timer task and remove it from active timers
     await cancel_timer_logic(boss_command, ctx.guild)
-
-    # Notify the channel that the timer has been canceled
     await ctx.send(f"The timer for boss {boss_name.lower()} has been canceled.")
 
 async def handle_boss_timers(message):
@@ -2943,9 +3633,9 @@ async def manage_boss_timers(guild, channel, boss_name, timer_end, window_end):
 
 async def update_timers_embed_if_active(guild):
     # Fetch the "Active_timers" setting
-    active_timers = await get_active_timers_setting(guild)
-    if not active_timers:
-        return  # Skip updating the embed if Active_timers is false
+    #active_timers = await get_active_timers_setting(guild)
+    #if not active_timers:
+    #    return  # Skip updating the embed if Active_timers is false
 
     # Fetch the "timers" channel
     timers_channel = discord.utils.get(guild.text_channels, name="timers")
@@ -3609,34 +4299,18 @@ async def toggledkpchannel(ctx):
 
 
 async def send_dkp_values_embed(guild):
+    print("Starting send_dkp_values_embed...")
+
+    # Fetch the "dkp-vals" channel
+    dkp_vals_channel = discord.utils.get(guild.text_channels, name="dkp-vals")
+    if dkp_vals_channel is None:
+        print("The DKP Values channel does not exist.")
+        return  # Log and exit if the channel doesn't exist
+
     # Fetch the DKP Database Channel
     dkp_database_channel = discord.utils.get(guild.text_channels, name="dkp-database")
     if dkp_database_channel is None:
         print("The DKP database channel does not exist.")
-        return
-
-    # Check the config.csv for the dkp_vals_channel toggle
-    config_message = await find_csv_message(dkp_database_channel, "config.csv")
-    if config_message is None:
-        print("Could not find the config.csv file.")
-        return
-
-    # Download and parse the config.csv file
-    config_file = config_message.attachments[0]
-    config_data = await download_csv(config_file)
-    if config_data is None:
-        print("Could not download or parse the config.csv file.")
-        return
-
-    # Check if the "dkp_vals_channel" is set to true in the config
-    dkp_vals_channel_enabled = False
-    for row in config_data:
-        if row[0] == "dkp_vals_channel" and row[1].lower() == "true":
-            dkp_vals_channel_enabled = True
-            break
-
-    if not dkp_vals_channel_enabled:
-        print("DKP Values channel is disabled in the config.")
         return
 
     # Find the Boss_DKP_Values.csv message in the "dkp-database" channel
@@ -3652,19 +4326,14 @@ async def send_dkp_values_embed(guild):
         print("Could not download or parse the Boss_DKP_Values.csv file, or the CSV is empty.")
         return
 
-    # Debugging: print the CSV data
-    #print("CSV Data:", csv_data)
-
-    # Fetch the "dkp-vals" channel
-    dkp_vals_channel = discord.utils.get(guild.text_channels, name="dkp-vals")
-    if dkp_vals_channel is None:
-        print("The DKP Values channel does not exist.")
-        return
+    print("Successfully parsed Boss_DKP_Values.csv. Preparing embed...")
 
     # Delete all existing messages with embeds in the dkp-vals channel
     async for message in dkp_vals_channel.history(limit=100):
         if message.embeds:
             await message.delete()
+
+    print("Deleted existing embed messages. Sending new embeds...")
 
     # Create the embed with boss DKP values
     embeds = []
@@ -3691,6 +4360,8 @@ async def send_dkp_values_embed(guild):
     # Send the new embeds to the channel
     for new_embed in embeds:
         await dkp_vals_channel.send(embed=new_embed)
+
+    print("Embeds sent successfully.")
 
 @bot.command(name="setauctionduration")
 async def set_auction_duration(ctx, duration: int):
@@ -3755,8 +4426,7 @@ ongoing_auctions = {}
 
 @bot.command(name="auction")
 async def start_auction(ctx, *args):
-
-    result = await role_confirm_command(ctx,"auction")
+    result = await role_confirm_command(ctx, "auction")
     if result is None:
         return
 
@@ -3764,50 +4434,43 @@ async def start_auction(ctx, *args):
         await ctx.send("Usage: !auction {item name} {minimum bid}. Minimum bid is optional and defaults to 0.")
         return
 
-    # Find the minimum bid and the item name
+    # Determine minimum bid and item name
     minimum_bid = 0
     item_name_parts = []
 
     for arg in args:
-        if arg.isdigit():  # If we find a number, treat it as the minimum bid
+        if arg.isdigit():  # Treat the first number as the minimum bid
             minimum_bid = int(arg)
             break
         item_name_parts.append(arg)
 
-    item_name = ' '.join(item_name_parts).lower()  # Combine the words into the item name and normalize to lowercase
+    item_name = ' '.join(item_name_parts).lower()
 
-    # Check if an auction for this item already exists
+    # Check if an auction already exists for the item
     if item_name in (key.lower() for key in ongoing_auctions.keys()):
         await ctx.send(f"An auction for '{item_name}' is already ongoing.")
         return
 
-    # Check if an item name was provided
+    # Validate item name
     if not item_name:
         await ctx.send("Please provide a valid item name.")
         return
 
-    # Fetch auction duration from config and set auction details
+    # Retrieve auction duration from the config
     dkp_database_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-database")
     if dkp_database_channel is None:
         await ctx.send("The DKP database channel does not exist.")
         return
 
-    # Retrieve auction duration from config.csv
     config_message = await find_csv_message(dkp_database_channel, "config.csv")
     if config_message is None:
         await ctx.send("Could not find the config.csv file.")
         return
 
-    config_file = config_message.attachments[0]
-    config_data = await download_csv(config_file)
+    config_data = await download_csv(config_message.attachments[0])
+    auction_duration = next((int(row[1]) for row in config_data if row[0] == "auction_duration"), 24)
 
-    auction_duration = 24  # default auction duration
-    for row in config_data:
-        if row[0] == "auction_duration":
-            auction_duration = int(row[1])
-            break
-
-    # Start the auction
+    # Create auction details
     auction_end_time = datetime.now() + timedelta(hours=auction_duration)
     ongoing_auctions[item_name] = {
         "minimum_bid": minimum_bid,
@@ -3819,14 +4482,15 @@ async def start_auction(ctx, *args):
 
     await ctx.send(f"Auction started for '{item_name}' with a minimum bid of {minimum_bid} DKP! Auction ends in {auction_duration} hours.")
 
-    # Schedule the auction end
-    bot.loop.call_later(auction_duration * 3600,
-                        lambda: asyncio.ensure_future(end_auction(item_name, ctx.guild.id, ctx.channel.id)))
+    # Schedule auction end
+    bot.loop.call_later(
+        auction_duration * 3600,
+        lambda: asyncio.ensure_future(end_auction(item_name, ctx.guild.id, ctx.channel.id))
+    )
 
 @bot.command(name="bid")
 async def place_bid(ctx, *args):
-
-    result = await role_confirm_command(ctx,"bid")
+    result = await role_confirm_command(ctx, "bid")
     if result is None:
         return
 
@@ -3834,28 +4498,22 @@ async def place_bid(ctx, *args):
         await ctx.send("Usage: !bid {item name} {value}.")
         return
 
-    # Split the arguments into item name and bid value
+    # Parse item name and bid value
     try:
-        bid_value = int(args[-1])  # The last argument should be the bid value
+        bid_value = int(args[-1])
     except ValueError:
         await ctx.send("Invalid bid. Ensure your bid is a valid number.")
         return
 
-    # The rest of the arguments form the item name
     item_name = ' '.join(args[:-1]).lower()
 
-    # Check if an auction with the normalized name exists
-    matched_item = None
-    for auction_item in ongoing_auctions.keys():
-        if auction_item.lower() == item_name:
-            matched_item = auction_item
-            break
-
-    if matched_item is None:
-        await ctx.send(f"No active auction for {item_name}.")
+    # Match item name with ongoing auctions
+    auction = ongoing_auctions.get(item_name)
+    if auction is None:
+        await ctx.send(f"No active auction for '{item_name}'.")
         return
 
-    # Fetch user's DKP balance from Balances_Database.csv
+    # Fetch user's DKP balances and nicknames
     dkp_database_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-database")
     if dkp_database_channel is None:
         await ctx.send("The DKP database channel does not exist.")
@@ -3866,54 +4524,90 @@ async def place_bid(ctx, *args):
         await ctx.send("Could not find the Balances_Database.csv file.")
         return
 
-    csv_file = balances_message.attachments[0]
-    balances_data = await download_csv(csv_file)
+    csv_data = await download_csv(balances_message.attachments[0])
 
-    # Find user's current balance
-    user_balance = None
-    for row in balances_data:
-        if row[0] == str(ctx.author):
-            user_balance = int(row[1])
+    # Skip the header row
+    csv_data = csv_data[1:]
+
+    nickname_message = await find_csv_message(dkp_database_channel, "Nicknames.csv")
+    nicknames = []
+    main_nickname = None
+
+    if nickname_message:
+        nickname_csv_data = await download_csv(nickname_message.attachments[0])
+        for row in nickname_csv_data:
+            if row[0] == ctx.author.name:
+                nicknames = row[1].split(", ") if row[1] else []
+                main_nickname = row[2] if len(row) > 2 else None
+                break
+
+    # Prepare balances for all accounts (including nicknames)
+    balances = {}
+    for row in csv_data:
+        try:
+            balances[row[0]] = int(row[1])
+        except (ValueError, IndexError):
+            continue  # Skip malformed rows
+
+    # Determine the bidding accounts to show
+    bidding_accounts = nicknames.copy()
+    if main_nickname is None or main_nickname not in nicknames:
+        bidding_accounts.insert(0, ctx.author.name)  # Include the base username if it's not the main nickname
+
+    if len(bidding_accounts) > 1:
+        # Prompt for account selection
+        view = discord.ui.View(timeout=30)
+
+        for account in bidding_accounts:
+            button = discord.ui.Button(label=account, custom_id=f"bid_{account}")
+            view.add_item(button)
+
+        msg = await ctx.send(f"{ctx.author.mention}, select the account to bid from for '{item_name}':", view=view)
+
+        async def button_callback(interaction):
+            if interaction.user != ctx.author:
+                await interaction.response.send_message("You cannot select this account.", ephemeral=True)
+                return
+
+            selected_account = interaction.data["custom_id"].split("_")[1]
+            await handle_bid(ctx, auction, selected_account, bid_value, balances)
+            await msg.delete()
+
+        for button in view.children:
+            button.callback = button_callback
+
+        await view.wait()
+        if not view.is_finished:
+            await msg.edit(content="Timeout: No selection was made.", view=None)
+
+    else:
+        # Use the only available account
+        account = bidding_accounts[0]
+        await handle_bid(ctx, auction, account, bid_value, balances)
+
+async def handle_bid(ctx, auction, account, bid_value, balances):
+    current_bid = auction["highest_bid"]
+    previous_bid = auction["bids"].get(account, 0)
+    balance = balances.get(account, 0)
+
+    if bid_value > balance:
+        await ctx.send(f"Insufficient DKP! Your current balance for {account} is {balance}.")
+        return
+
+    if bid_value <= max(previous_bid, auction["minimum_bid"]):
+        await ctx.send(f"Your bid must be higher than {max(previous_bid, auction['minimum_bid'])} DKP.")
+        return
+
+    auction["highest_bid"] = bid_value
+    auction["highest_bidder"] = account
+    auction["bids"][account] = bid_value
+
+    # Use the item name directly from the auction dictionary
+    for item_name, data in ongoing_auctions.items():
+        if data == auction:
             break
 
-    if user_balance is None:
-        await ctx.send(f"You don't have a DKP balance recorded.")
-        return
-
-    # Validate bid
-    auction = ongoing_auctions[matched_item]
-    current_bid = auction["highest_bid"]
-    previous_bid = auction["bids"].get(ctx.author.id, 0)
-
-    if bid_value > user_balance:
-        await ctx.send(f"You don't have enough DKP! Your current balance is {user_balance}.")
-        return
-
-    if bid_value < auction["minimum_bid"]:
-        await ctx.send(f"Your bid must be higher than the minimum bid of {auction['minimum_bid']}.")
-        return
-
-    if bid_value <= previous_bid:
-        await ctx.send(f"Your bid must be higher than your previous bid of {previous_bid}.")
-        return
-
-    if bid_value > current_bid:
-        # Update auction data
-        auction["highest_bid"] = bid_value
-        auction["highest_bidder"] = ctx.author
-        auction["bids"][ctx.author.id] = bid_value
-        await ctx.send(f"{ctx.author.name} has placed the highest bid of {bid_value} DKP for {matched_item}!")
-    else:
-        await ctx.send(f"Your bid must be higher than the current highest bid of {current_bid} DKP.")
-
-# Error handling for the bid command
-@place_bid.error
-async def place_bid_error(ctx, error):
-    if isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send("Usage: !bid {item name} {value}.")
-    elif isinstance(error, commands.BadArgument):
-        await ctx.send("Invalid bid. Ensure your bid is a valid number.")
-
+    await ctx.send(f"{account} has placed the highest bid of {bid_value} DKP for '{item_name}'.")
 
 async def end_auction(item_name, guild_id, channel_id):
     # Retrieve the auction from ongoing_auctions and remove it to prevent further attempts
@@ -3943,8 +4637,16 @@ async def end_auction(item_name, guild_id, channel_id):
         winner = auction["highest_bidder"]
         bid_value = auction["highest_bid"]
 
+        # Handle user or nickname
+        if isinstance(winner, str):  # Winner is a nickname
+            winner_name = winner
+        else:  # Winner is a Discord member object
+            winner_name = winner.display_name
+
         # Announce the winner
-        await result_channel.send(f"{winner.mention} has won the auction for {item_name} with a bid of {bid_value} DKP!")
+        await result_channel.send(
+            f"{winner_name} has won the auction for '{item_name}' with a bid of {bid_value} DKP!"
+        )
 
         # Fetch the balances_database.csv message and update the winner's balance
         balances_message = await find_csv_message(dkp_database_channel, "Balances_Database.csv")
@@ -3958,7 +4660,7 @@ async def end_auction(item_name, guild_id, channel_id):
         # Update the winner's balance in the CSV data
         updated = False
         for row in balances_data:
-            if row[0] == str(winner):
+            if row[0] == winner_name:
                 current_balance = int(row[1])
                 new_balance = current_balance - bid_value  # Deduct the bid from the current balance
                 row[1] = str(new_balance)  # Update the current balance
@@ -3966,7 +4668,9 @@ async def end_auction(item_name, guild_id, channel_id):
                 break
 
         if not updated:
-            await result_channel.send(f"Error: Could not find {winner}'s balance in the balances_database.csv file.")
+            await result_channel.send(
+                f"Error: Could not find {winner_name}'s balance in the balances_database.csv file."
+            )
             return
 
         # Create a new CSV file with the updated balances
@@ -3982,18 +4686,69 @@ async def end_auction(item_name, guild_id, channel_id):
         # Delete the old CSV message
         await balances_message.delete()
 
-        await result_channel.send(f"{winner.mention}'s new balance is {new_balance} DKP.")
+        await result_channel.send(f"{winner_name}'s new balance is {new_balance} DKP.")
     else:
         # If no one bid, announce that the auction ended with no winner
-        await result_channel.send(f"No bids were placed for {item_name}. Auction ended with no winner.")
+        await result_channel.send(f"No bids were placed for '{item_name}'. Auction ended with no winner.")
 
 # You would need a background task or a timer to call `end_auction` at the appropriate time
 
 @bot.command(name="auctionend")
 async def auction_end(ctx, *item_name_parts):
-
-    result = await role_confirm_command(ctx,"auctionend")
+    result = await role_confirm_command(ctx, "auctionend")
     if result is None:
+        return
+
+    # If no item name is specified, show active auctions as buttons
+    if not item_name_parts:
+        if not ongoing_auctions:
+            await ctx.send("There are no active auctions to end.")
+            return
+
+        view = discord.ui.View(timeout=30)
+        auction_ended = False  # Track if an auction was successfully ended
+
+        for item_name in ongoing_auctions.keys():
+            button = discord.ui.Button(label=item_name, custom_id=f"end_{item_name}")
+            view.add_item(button)
+
+        msg = await ctx.send("Select an auction to end:", view=view)
+
+        async def button_callback(interaction):
+            nonlocal auction_ended  # Allow modification of the outer variable
+            if interaction.user != ctx.author:
+                await interaction.response.send_message(
+                    "You are not authorized to end this auction.", ephemeral=True
+                )
+                return
+
+            # Extract the item name from the custom_id
+            selected_item = interaction.data["custom_id"].split("_", 1)[1]
+
+            if selected_item in ongoing_auctions:
+                await end_auction(selected_item, ctx.guild.id, ctx.channel.id)
+                await interaction.response.edit_message(
+                    content=f"The auction for '{selected_item}' has been manually ended.", view=None
+                )
+                auction_ended = True  # Mark that an auction was successfully ended
+            else:
+                await interaction.response.send_message(
+                    f"The auction for '{selected_item}' no longer exists.", ephemeral=True
+                )
+
+            # Stop the view to prevent timeout logic
+            view.stop()
+
+        # Assign the callback to each button
+        for button in view.children:
+            button.callback = button_callback
+
+        await view.wait()
+
+        # Timeout logic: only trigger if no auction was successfully ended
+        if not auction_ended:
+            await msg.edit(content="Timeout: No auction was ended.", view=None)
+
         return
 
     # Combine the item name parts into a single string
@@ -4007,20 +4762,69 @@ async def auction_end(ctx, *item_name_parts):
             break
 
     if matched_item is None:
-        await ctx.send(f"No active auction for {item_name}.")
+        await ctx.send(f"No active auction for '{item_name}'.")
         return
 
-    # End the auction immediately with the correct case-preserved item name
+    # End the auction immediately
     await end_auction(matched_item, ctx.guild.id, ctx.channel.id)
-
-    await ctx.send(f"The auction for {matched_item} has been manually ended.")
-
+    await ctx.send(f"The auction for '{matched_item}' has been manually ended.")
 
 @bot.command(name="auctioncancel")
 async def auction_cancel(ctx, *item_name_parts):
-
-    result = await role_confirm_command(ctx,"auctioncancel")
+    result = await role_confirm_command(ctx, "auctioncancel")
     if result is None:
+        return
+
+    # If no item name is specified, show active auctions as buttons
+    if not item_name_parts:
+        if not ongoing_auctions:
+            await ctx.send("There are no active auctions to cancel.")
+            return
+
+        view = discord.ui.View(timeout=30)
+        auction_canceled = False  # Track if an auction was successfully canceled
+
+        for item_name in ongoing_auctions.keys():
+            button = discord.ui.Button(label=item_name, custom_id=f"cancel_{item_name}")
+            view.add_item(button)
+
+        msg = await ctx.send("Select an auction to cancel:", view=view)
+
+        async def button_callback(interaction):
+            nonlocal auction_canceled  # Allow modification of the outer variable
+            if interaction.user != ctx.author:
+                await interaction.response.send_message(
+                    "You are not authorized to cancel this auction.", ephemeral=True
+                )
+                return
+
+            # Extract the item name from the custom_id
+            selected_item = interaction.data["custom_id"].split("_", 1)[1]
+
+            if selected_item in ongoing_auctions:
+                ongoing_auctions.pop(selected_item)  # Remove the auction
+                await interaction.response.edit_message(
+                    content=f"The auction for '{selected_item}' has been canceled.", view=None
+                )
+                auction_canceled = True  # Mark that an auction was successfully canceled
+            else:
+                await interaction.response.send_message(
+                    f"The auction for '{selected_item}' no longer exists.", ephemeral=True
+                )
+
+            # Stop the view to prevent timeout logic
+            view.stop()
+
+        # Assign the callback to each button
+        for button in view.children:
+            button.callback = button_callback
+
+        await view.wait()
+
+        # Timeout logic: only trigger if no auction was successfully canceled
+        if not auction_canceled:
+            await msg.edit(content="Timeout: No auction was canceled.", view=None)
+
         return
 
     # Combine the item name parts into a single string
@@ -4034,13 +4838,12 @@ async def auction_cancel(ctx, *item_name_parts):
             break
 
     if matched_item is None:
-        await ctx.send(f"No active auction for {item_name} to cancel.")
+        await ctx.send(f"No active auction for '{item_name}' to cancel.")
         return
 
-    # Remove the matched auction from the ongoing_auctions list
+    # Cancel the auction immediately
     ongoing_auctions.pop(matched_item)
-
-    await ctx.send(f"The auction for {matched_item} has been canceled.")
+    await ctx.send(f"The auction for '{matched_item}' has been canceled.")
 
 #dkp decay code
 
@@ -4705,6 +5508,323 @@ async def editcommandroles(ctx):
                 embed, view = await create_page_embed(current_page)
                 await interaction.response.edit_message(embed=embed, view=view)
 
+@bot.command(name="toggles")
+async def toggles(ctx):
+    result = await role_confirm_command(ctx, "toggles")
+    if result is None:
+        return
+
+    config_data, dkp_database_channel, config_message = result
+
+    # Filter relevant toggleable settings
+    toggleable_settings = [
+        row for row in config_data if row[0].startswith("toggle")
+        or row[0].startswith("messagetoggle")
+        or row[0].startswith("whograntedtoggle")
+        or row[0] in {"Active_timers", "dkp_vals_channel", "nick_doublecheck", "nickdelete_doublecheck"}
+    ]
+
+    # Map toggle settings to corresponding channels or roles
+    channel_mapping = {
+        "toggle_dl": "dl-boss-alerts",
+        "toggle_edl": "edl-boss-alerts",
+        "toggle_legacy": "legacy-boss-alerts",
+        "toggle_ringboss": "ringboss-boss-alerts",
+        "toggle_worldboss": "worldboss-boss-alerts"
+    }
+    role_mapping = {
+        "toggle_dl_role": "dl",
+        "toggle_edl_role": "edl",
+        "toggle_legacy_role": "legacy",
+        "toggle_ringboss_role": "ringboss",
+        "toggle_worldboss_role": "worldboss"
+    }
+    other_channel_commands = {
+        "Active_timers",
+        "dkp_vals_channel",
+        "toggle_role_channel"
+
+    }
+
+    # Paginate the settings into chunks of 23 (leaving space for navigation buttons)
+    settings_per_page = 23
+    pages = [
+        toggleable_settings[i:i + settings_per_page]
+        for i in range(0, len(toggleable_settings), settings_per_page)
+    ]
+
+    async def create_page_embed(page_index):
+        page_data = pages[page_index]
+        embed = discord.Embed(
+            title=f"Toggle Settings (Page {page_index + 1}/{len(pages)})",
+            description="Toggle settings for bot functionality.",
+        )
+        for row in page_data:
+            setting_name = row[0]
+            embed.add_field(name=setting_name, value=row[1], inline=True)
+
+        view = discord.ui.View(timeout=120)
+        for row in page_data:
+            setting_name = row[0]
+            button = discord.ui.Button(
+                label=setting_name,
+                style=discord.ButtonStyle.primary,
+                custom_id=setting_name,
+            )
+            view.add_item(button)
+
+        if len(pages) > 1:
+            if page_index > 0:
+                view.add_item(discord.ui.Button(
+                    label="Previous", style=discord.ButtonStyle.secondary, custom_id="previous_page"
+                ))
+            if page_index < len(pages) - 1:
+                view.add_item(discord.ui.Button(
+                    label="Next", style=discord.ButtonStyle.secondary, custom_id="next_page"
+                ))
+
+        return embed, view
+
+    current_page = 0
+    embed, view = await create_page_embed(current_page)
+    message = await ctx.send(embed=embed, view=view)
+
+    @bot.event
+    async def on_interaction(interaction: discord.Interaction):
+        nonlocal current_page, config_message
+
+        if interaction.data and "custom_id" in interaction.data:
+            custom_id = interaction.data["custom_id"]
+            if ctx.author.id != interaction.user.id:
+                await interaction.response.send_message(
+                    "Only the user who initiated the command can interact with these buttons.", ephemeral=True
+                )
+                return
+
+            await interaction.response.defer()
+
+            # Handle pagination navigation
+            if custom_id == "previous_page":
+                if current_page > 0:
+                    current_page -= 1
+                    embed, view = await create_page_embed(current_page)
+                    await interaction.edit_original_response(embed=embed, view=view)
+                return
+
+            elif custom_id == "next_page":
+                if current_page < len(pages) - 1:
+                    current_page += 1
+                    embed, view = await create_page_embed(current_page)
+                    await interaction.edit_original_response(embed=embed, view=view)
+                return
+            # General handler for unhandled toggles
+            for row in config_data:
+                if row[0] == custom_id and custom_id not in channel_mapping and custom_id not in role_mapping and custom_id not in other_channel_commands:
+                    current_value = row[1].lower() == "true"
+                    row[1] = "false" if current_value else "true"
+                    break
+
+            # Handle boss channel toggles
+            if custom_id in channel_mapping.keys():
+                channel_name = channel_mapping[custom_id]
+                target_channel = discord.utils.get(ctx.guild.text_channels, name=channel_name)
+
+                for row in config_data:
+                    if row[0] == custom_id:
+                        current_value = row[1].lower() == "true"
+                        row[1] = "false" if current_value else "true"
+                        break
+
+                if current_value:  # Currently enabled, toggle off
+                    if target_channel:
+                        await target_channel.delete()
+                        await interaction.followup.send(f"The {channel_name} channel has been deleted.")
+                else:  # Currently disabled, toggle on
+                    if target_channel is None:
+                        overwrites = {
+                            ctx.guild.default_role: discord.PermissionOverwrite(send_messages=False),
+                            ctx.guild.me: discord.PermissionOverwrite(send_messages=True)
+                        }
+                        await ctx.guild.create_text_channel(channel_name, overwrites=overwrites)
+                        await interaction.followup.send(f"The {channel_name} channel has been created.")
+            # Handle Active_timers toggle
+            if custom_id == "Active_timers":
+                for row in config_data:
+                    if row[0] == "Active_timers":
+                        current_value = row[1].lower() == "true"
+                        row[1] = "false" if current_value else "true"
+                        break
+
+                timers_channel = discord.utils.get(ctx.guild.text_channels, name="timers")
+
+                if current_value:  # Currently enabled, toggle off
+                    if timers_channel:
+                        await timers_channel.delete()
+                        await interaction.followup.send("Timers are now disabled and the Timers channel has been deleted.")
+                else:  # Currently disabled, toggle on
+                    if timers_channel is None:
+                        overwrites = {
+                            ctx.guild.default_role: discord.PermissionOverwrite(send_messages=False),
+                            ctx.guild.me: discord.PermissionOverwrite(send_messages=True)
+                        }
+                        timers_channel = await ctx.guild.create_text_channel("timers", overwrites=overwrites)
+                        await update_timers_embed_if_active(ctx.guild)  # Send the timers embed
+                        await interaction.followup.send("Timers are now enabled and the Timers channel has been created.")
+
+            # Handle role toggles
+            if custom_id in role_mapping.keys():
+                for row in config_data:
+                    if row[0] == custom_id:
+                        current_value = row[1].lower() == "true"
+                        row[1] = "false" if current_value else "true"
+                        break
+
+                role_name = role_mapping[custom_id]
+                target_role = discord.utils.get(ctx.guild.roles, name=role_name)
+
+                if current_value:  # Currently enabled, toggle off
+                    if target_role:
+                        await target_role.delete()
+                        await interaction.followup.send(f"The {role_name} role has been deleted.")
+                else:  # Currently disabled, toggle on
+                    if target_role is None:
+                        await ctx.guild.create_role(name=role_name, mentionable=True)
+                        await interaction.followup.send(
+                            f"The {role_name} role has been created and is now mentionable.")
+
+                # Update the embed in the #get-timer-roles channel
+                role_channel = discord.utils.get(ctx.guild.text_channels, name="get-timer-roles")
+                if role_channel:
+                    await generate_role_embed(ctx.guild, role_channel, config_data)
+
+            # Handle toggle_role_channel
+            if custom_id == "toggle_role_channel":
+                for row in config_data:
+                    if row[0] == "toggle_role_channel":
+                        current_value = row[1].lower() == "true"
+                        row[1] = "false" if current_value else "true"
+                        break
+
+                role_channel = discord.utils.get(ctx.guild.text_channels, name="get-timer-roles")
+
+                if current_value:  # Currently enabled, toggle off
+                    if role_channel:
+                        await role_channel.delete()
+                else:  # Currently disabled, toggle on
+                    if role_channel is None:
+                        overwrites = {
+                            ctx.guild.default_role: discord.PermissionOverwrite(send_messages=False),
+                            ctx.guild.me: discord.PermissionOverwrite(send_messages=True)
+                        }
+                        role_channel = await ctx.guild.create_text_channel('get-timer-roles',
+                                                                                   overwrites=overwrites)
+                        await generate_role_embed(ctx.guild, role_channel, config_data)
+
+            # Handle dkp_vals_channel toggle
+            if custom_id == "dkp_vals_channel":
+                for row in config_data:
+                    if row[0] == "dkp_vals_channel":
+                        current_value = row[1].lower() == "true"
+                        row[1] = "false" if current_value else "true"
+                        break
+
+                dkp_vals_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-vals")
+
+                if current_value:  # Currently enabled, toggle off
+                    if dkp_vals_channel:
+                        await dkp_vals_channel.delete()
+                        await interaction.followup.send("The DKP Values channel has been deleted.")
+                else:  # Currently disabled, toggle on
+                    if dkp_vals_channel is None:
+                        overwrites = {
+                            ctx.guild.default_role: discord.PermissionOverwrite(send_messages=False, read_messages=True),
+                            ctx.guild.me: discord.PermissionOverwrite(send_messages=True, read_messages=True)
+                        }
+                        dkp_vals_channel = await ctx.guild.create_text_channel("dkp-vals", overwrites=overwrites)
+                        await interaction.followup.send("The DKP Values channel has been created.")
+                        await send_dkp_values_embed(ctx.guild)
+
+        # Save updated config.csv only if not navigating pages
+            if custom_id not in {"previous_page", "next_page"}:
+                output = io.StringIO()
+                writer = csv.writer(output)
+                writer.writerows(config_data)
+                output.seek(0)
+
+                new_config_file = discord.File(io.BytesIO(output.getvalue().encode()), filename="config.csv")
+                await config_message.delete()
+                new_config_message = await dkp_database_channel.send(file=new_config_file)
+                config_message = new_config_message
+
+                # Update the current page embed to reflect changes
+                embed, view = await create_page_embed(current_page)
+                await interaction.edit_original_response(embed=embed, view=view)
+
+
+@bot.command(name="removemain")
+async def remove_main(ctx, member: discord.Member = None):
+    result = await role_confirm_command(ctx, "removemain")
+    if result is None:
+        return
+
+    # Use the invoking user's name if no member is specified
+    target_user = member.name if member else ctx.author.name
+
+    # Fetch the DKP Database Channel
+    dkp_database_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-database")
+    if dkp_database_channel is None:
+        await ctx.send("The DKP database channel does not exist.")
+        return
+
+    # Find the "Nicknames.csv" message in the "dkp-database" channel
+    nickname_message = await find_csv_message(dkp_database_channel, "Nicknames.csv")
+    if nickname_message is None:
+        await ctx.send("Could not find the Nicknames.csv file.")
+        return
+
+    # Download and parse the Nicknames.csv file
+    nickname_csv_file = nickname_message.attachments[0]
+    nickname_csv_data = await download_csv(nickname_csv_file)
+
+    if nickname_csv_data is None:
+        await ctx.send("Could not download or parse the Nicknames.csv file.")
+        return
+
+    # Modify the data to remove the main nickname
+    updated = False
+    for row in nickname_csv_data:
+        if row[0] == target_user:
+            if len(row) > 2 and row[2]:  # Check if a main is assigned
+                row[2] = ""  # Clear the main nickname field
+                updated = True
+            break
+
+    if not updated:
+        await ctx.send(f"No main nickname is assigned to {target_user}.")
+        return
+
+    # Create a new CSV file with the updated data
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerows(nickname_csv_data)
+    output.seek(0)
+
+    # Send the updated CSV to the "dkp-database" channel
+    new_csv_file = discord.File(io.BytesIO(output.getvalue().encode()), filename="Nicknames.csv")
+    await dkp_database_channel.send(file=new_csv_file)
+
+    # Delete the original message containing the old CSV
+    await nickname_message.delete()
+
+    # Send confirmation to the channel where the command was issued
+    await ctx.send(f"The main nickname for {target_user} has been removed.")
+
+@remove_main.error
+async def remove_main_error(ctx, error):
+    if isinstance(error, commands.MemberNotFound):
+        await ctx.send("The specified member could not be found. Please check the name and try again.")
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send("Usage: `!removemain` or `!removemain @user`. Specify a user only if not removing your own main nickname.")
 
 help_dict = {
     'k': """!k
@@ -4725,13 +5845,17 @@ See !nick for more information.
 By default this command requires the DKP Keeper role to use.""",
     'nick': """Usage: !nick @user nickname
 Use !nick to create nicknames for users in the server. This allows you to track attendance more easily without needing to memorize their @user. A good practice is to !nick every person in the server with their in-game name for easier tracking.
-Multiple nicknames can be added to a single user, this allows for handling if they have multiple accounts. To remove a nickname see !nickdelete help page.
+Multiple nicknames can be added to a single user, this allows for handling if they have multiple accounts as each of the nicknames has a separate dkp pool.To remove a nickname see !nickdelete help page.
+You can set a "main" nickname with the !setmain command. This is highly recommended if the user only has 1 account.
 The nicknames work for the following commands:
 !a
 !dkpadd
 !dkpsubtract
 !dkpsubtractboth
+!dkpaddcurrent
+!dkpsubtractlifetime
 !bal
+And is used in many other circumstances like auctions and !k. For even more info see !setmain.
 By default this command requires the DKP Keeper role to use.""",
     'dkpadd': """Usage: !dkpadd # user1 user2 user3 etc
 
@@ -4799,9 +5923,9 @@ To cancel timers, see !cancel.
 By default, the timers will @ everyone on window open and closed. Use !togglewindows to change this to only @ everyone on window open.
 This can also be changed from @ everyone to only tag those with the boss type role using the !toggle_role command.
 For help assigning roles, see the help page for the !togglerolechannel command.""",
-    'cancel': """Usage: !cancel {boss}
+    'cancel': """Usage: !cancel {boss} or !cancel
 For example: !cancel 155
-
+Doing !cancel without specifying a {boss} will allow for the user to see all currently running timers to choose from. Pressing their corresponding button will cancel their timer.
 If there is a currently running timer for a boss, using !cancel {boss} will cancel the timer for said boss. To see a list of supported timers, see the help entry for !{boss}.""",
 
     'toggle': """Usage: !toggle {boss type}
@@ -4992,65 +6116,147 @@ Example: !dkpadcurrent 10 pie jeff @eggroll (note multiple users are supported b
 DKP Keepers can use this command to manually add only current DKP to either a single user or a set of users defined by the user1 user2 user3 arguments. This can be used to correct DKP values or grant awards of DKP. This will increase ONLY current DKP and have no effect on lifetime DKP.
 Nicknames can be used for this command. See !nick for more information.
 By default this command requires the DKP Keeper role to use.""",
+    'removemain': """Usage: !removemain @user, !removemain
+
+Example: !removemain unassigns their current main nickname, !removemain @user removes that user's current main nickname
+'Main' nicknames are used if a server owner prefers to keep all dkp earned across accounts saved as the person instead of each account having its own individual DKP tally.
+Mains allow for easier refrencing of a user without the need to tag their @user account each time.
+NOTE: this command does not delete that account, just unassigns it as their "main". To delete a nickname use !nickdelete
+By default this command requires the DKP Keeper role to use.""",
+    'setmain': """Usage: !setmain @user {nickname}, !setmain @user, !setmain {nickname}, !setmain
+
+Examples: !setmain will give a list of current usernames to pick from, which is similar to the usage of !setmain @user, which will show the list of that @user's nicknames to pick from.
+'Main' nicknames are used if a server owner prefers to keep all dkp earned across accounts saved as the person instead of each account having its own individual DKP tally.
+Mains allow for easier refrencing of a user without the need to tag their @user account each time.
+To remove the main of a user see the help page for !removemain.
+By default this command requires the DKP Keeper role to use.""",
+    'toggles': """Usage: !toggles
+
+This command allows for the user to edit all toggles. This is one of the most important commands as it allows the user to quickly edit all toggleable settings for bot function.
+By default this command requires the DKP Keeper role to use.""",
+    'tutorials': """
+    Video tutorials / info to  help server owners configure the bot
+https://youtube.com/playlist?list=PL1_mX4n1t8JcdqhVZRLtA93bPlODE_NIZ&si=2PhZ87mffAjihWK6""",
 }
 
 @bot.command(name="help")
 async def help_command(ctx, command: str = None):
-    # Skip role check in DMs
-    if ctx.guild is not None:
+    # Determine if the command is invoked in a DM or a guild
+    is_dm = ctx.guild is None
+
+    # Role check is skipped in DMs since there's no guild context
+    if not is_dm:
         result = await role_confirm_command(ctx, "help")
         if result is None:
             return
 
-    # Generate the help message
-    if command is None:
-        help_message = """
-        **Help usage:**
-        Send `!help` followed by one of the following commands:
+    # Fetch toggle_public_help_messages from the config (only for guilds)
+    toggle_public_help_messages = False
+    if not is_dm:
+        dkp_database_channel = discord.utils.get(ctx.guild.text_channels, name="dkp-database")
+        if dkp_database_channel is None:
+            await ctx.send("The DKP database channel does not exist.")
+            return
 
-        `k`
-        `a`
-        `nick`
-        `dkpadd`
-        `dkpsubtract`
-        `dkpsubtractboth`
-        `bal`
-        `editcommandroles`
-        `setdkp`
-        `togglewindows`
-        `toggletimers`
-        `{boss}`
-        `timers`
-        `cancel`
-        `toggle`
-        `toggle_role`
-        `togglerolechannel`
-        `auction`
-        `bid`
-        `auctionend`
-        `auctioncancel`
-        `setauctionduration`
-        `toggledkpchannel`
-        `bossadd`
-        `bossdelete`
-        `nickdelete`
-        `timeradd`
-        `timerdelete`
-        `timeredit`
-        `assign`
-        `setdecaypercent`
-        `setdecaytimeframe`
-        `toggledecay`
-        `restorefromconfig`
-        `createbackup`
-        `restorefrombackup`
-        `dkpaddcurrent`
-        `dkpsubtractlifetime`
-        """
-        await ctx.send(help_message)
-    else:
+        config_message = await find_csv_message(dkp_database_channel, "config.csv")
+        if config_message is None:
+            await ctx.send("Could not find the config.csv file.")
+            return
+
+        config_file = config_message.attachments[0]
+        config_data = await download_csv(config_file)
+
+        if config_data is None:
+            await ctx.send("Could not download or parse the config.csv file.")
+            return
+
+        toggle_public_help_messages = next(
+            (row[1] for row in config_data if row[0] == "toggle_public_help_messages"), "false"
+        ).lower() == "true"
+
+    # If a specific command is provided, display its help
+    if command:
         response = help_dict.get(command, "Command not found. Please use `!help` for a list of commands.")
-        await ctx.send(response)
+        if is_dm or not toggle_public_help_messages:
+            await ctx.send(response, ephemeral=True)
+        else:
+            await ctx.send(response)
+        return
+
+    # Generate the paginated help menu
+    commands = list(help_dict.keys())
+    buttons_per_page = 23  # Max buttons per page, leaving room for navigation buttons
+    pages = [commands[i:i + buttons_per_page] for i in range(0, len(commands), buttons_per_page)]
+
+    async def create_help_page(page_index):
+        embed = discord.Embed(
+            title=f"Help Menu (Page {page_index + 1}/{len(pages)})",
+            description="Click a button to view details about a command.",
+        )
+        page_commands = pages[page_index]
+
+        embed.add_field(
+            name="Commands",
+            value="\n".join(page_commands),
+            inline=False,
+        )
+
+        view = discord.ui.View(timeout=120)
+
+        # Add a button for each command on the page
+        for command_name in page_commands:
+            button = discord.ui.Button(label=command_name, custom_id=f"help_{command_name}")
+            view.add_item(button)
+
+        # Navigation buttons
+        if len(pages) > 1:
+            if page_index > 0:
+                view.add_item(discord.ui.Button(label="Previous", custom_id="previous_page", style=discord.ButtonStyle.secondary))
+            if page_index < len(pages) - 1:
+                view.add_item(discord.ui.Button(label="Next", custom_id="next_page", style=discord.ButtonStyle.secondary))
+
+        return embed, view
+
+    current_page = 0
+    embed, view = await create_help_page(current_page)
+
+    # Send the help menu as ephemeral if in DM or based on the toggle
+    if is_dm or not toggle_public_help_messages:
+        message = await ctx.send(embed=embed, view=view, ephemeral=True)
+    else:
+        message = await ctx.send(embed=embed, view=view)
+
+    @bot.event
+    async def on_interaction(interaction: discord.Interaction):
+        nonlocal current_page
+
+        # Ensure the interaction is a button press
+        if not interaction.data or "custom_id" not in interaction.data:
+            return
+
+        custom_id = interaction.data["custom_id"]
+
+        # Ensure the user interacting is the one who initiated the command
+        if interaction.user != ctx.author:
+            await interaction.response.send_message("You cannot interact with this help menu.", ephemeral=True)
+            return
+
+        # Handle command help button
+        if custom_id.startswith("help_"):
+            # Extract the full command name (handles multi-word commands)
+            command_name = custom_id[len("help_"):]
+            response = help_dict.get(command_name, f"Command `{command_name}` not found.")
+            await interaction.response.send_message(response, ephemeral=True)
+
+        # Handle navigation
+        elif custom_id == "previous_page":
+            current_page -= 1
+            embed, view = await create_help_page(current_page)
+            await interaction.response.edit_message(embed=embed, view=view)
+        elif custom_id == "next_page":
+            current_page += 1
+            embed, view = await create_help_page(current_page)
+            await interaction.response.edit_message(embed=embed, view=view)
 
 # Start the bot using your bot token
-bot.run('Put your bot token here')
+bot.run('PUT BOT TOKEN HERE')
