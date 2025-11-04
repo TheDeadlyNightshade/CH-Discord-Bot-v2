@@ -287,6 +287,7 @@ async def on_ready():
                                 await decay_timer(None, db_channel)
                                 break
         await load_active_boss_timers(guild)
+        await update_timers_embed_if_active(guild)
 
 @bot.event
 async def on_guild_join(guild):
