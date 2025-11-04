@@ -5593,11 +5593,16 @@ async def toggles(ctx):
     async def on_interaction(interaction: discord.Interaction):
         nonlocal current_page, config_message
 
+        # >>> IMPORTANT: only handle clicks that belong to *this* toggles message
+        if not interaction.message or interaction.message.id != message.id:
+            return
+
         if interaction.data and "custom_id" in interaction.data:
             custom_id = interaction.data["custom_id"]
             if ctx.author.id != interaction.user.id:
                 await interaction.response.send_message(
-                    "Only the user who initiated the command can interact with these buttons.", ephemeral=True
+                    "Only the user who initiated the command can interact with these buttons.",
+                    ephemeral=True,
                 )
                 return
 
@@ -6259,4 +6264,4 @@ async def help_command(ctx, command: str = None):
             await interaction.response.edit_message(embed=embed, view=view)
 
 # Start the bot using your bot token
-bot.run('PUT BOT TOKEN HERE')
+bot.run('PUT YOUR BOT TOKEN HERE')
