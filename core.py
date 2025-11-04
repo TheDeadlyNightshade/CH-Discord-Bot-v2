@@ -19,6 +19,8 @@ intents.members = True  # Enable fetching members
 
 bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
+ACTIVE_TIMERS_FILENAME = "Active_Boss_Timers.csv"
+
 DEFAULT_CONFIG = {
     "togglewindows": "true",
     "Active_timers": "false",
@@ -142,7 +144,8 @@ async def setup_guild(guild):
         ("Boss_DKP_Values.csv", create_dkp_values_csv),
         ("Balances_Database.csv", create_balances_csv),
         ("Boss_Timers.csv", create_timers_csv),
-        ("config.csv", create_config_csv)
+        ("config.csv", create_config_csv),
+        ("Active_Boss_Timers.csv", create_active_timers_csv),
     ]:
         message = await find_csv_message(db_channel, file_name)
         if message is None:
@@ -170,6 +173,43 @@ async def setup_guild(guild):
                             # make sure decay_timer is defined elsewhere like in your code
                             await decay_timer(None, db_channel)
                             break
+
+async def create_timers_csv(guild):
+    # Data for the timers CSV based on the boss_timers dictionary
+    timer_data = [["Boss Name", "Timer Duration (seconds)", "Window Duration (seconds)", "Type"]]
+
+    # Append boss data to the CSV rows
+    for boss_name, info in boss_timers.items():
+        timer_data.append([boss_name, info["timer"], info["window"], info["type"]])
+
+    # Create an in-memory CSV file
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerows(timer_data)
+    output.seek(0)
+
+    # Fetch the DKP Database Channel
+    dkp_database_channel = discord.utils.get(guild.text_channels, name="dkp-database")
+    if dkp_database_channel is not None:
+        # Send the new CSV file to the "dkp-database" channel
+        timers_file = discord.File(io.BytesIO(output.getvalue().encode()), filename="Boss_Timers.csv")
+        await dkp_database_channel.send("Here are the timers for each boss:", file=timers_file)
+
+async def create_active_timers_csv(guild):
+    # make a CSV with just the header
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Boss Name", "Timer End (epoch)", "Window End (epoch)", "Channel ID"])
+    output.seek(0)
+
+    dkp_database_channel = discord.utils.get(guild.text_channels, name="dkp-database")
+    if dkp_database_channel is None:
+        print(f"[Timers] dkp-database not found in {guild.name}, cannot create Active_Boss_Timers.csv.")
+        return
+
+    file = discord.File(io.BytesIO(output.getvalue().encode()), filename=ACTIVE_TIMERS_FILENAME)
+    await dkp_database_channel.send(file=file)
+    print(f"[Timers] Created empty {ACTIVE_TIMERS_FILENAME} in {guild.name}.")
 
 @bot.event
 async def on_ready():
@@ -214,7 +254,8 @@ async def on_ready():
             ("Boss_DKP_Values.csv", create_dkp_values_csv),
             ("Balances_Database.csv", create_balances_csv),
             ("Boss_Timers.csv", create_timers_csv),
-            ("config.csv", create_config_csv)
+            ("config.csv", create_config_csv),
+            ("Active_Boss_Timers.csv", create_active_timers_csv),
         ]:
             message = await find_csv_message(db_channel, file_name)
             if message is None:
@@ -245,6 +286,7 @@ async def on_ready():
                                 decay_active = True
                                 await decay_timer(None, db_channel)
                                 break
+        await load_active_boss_timers(guild)
 
 @bot.event
 async def on_guild_join(guild):
@@ -283,26 +325,6 @@ boss_timers = {
 
 }
 
-async def create_timers_csv(guild):
-    # Data for the timers CSV based on the boss_timers dictionary
-    timer_data = [["Boss Name", "Timer Duration (seconds)", "Window Duration (seconds)", "Type"]]
-
-    # Append boss data to the CSV rows
-    for boss_name, info in boss_timers.items():
-        timer_data.append([boss_name, info["timer"], info["window"], info["type"]])
-
-    # Create an in-memory CSV file
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerows(timer_data)
-    output.seek(0)
-
-    # Fetch the DKP Database Channel
-    dkp_database_channel = discord.utils.get(guild.text_channels, name="dkp-database")
-    if dkp_database_channel is not None:
-        # Send the new CSV file to the "dkp-database" channel
-        timers_file = discord.File(io.BytesIO(output.getvalue().encode()), filename="Boss_Timers.csv")
-        await dkp_database_channel.send("Here are the timers for each boss:", file=timers_file)
 
 def update_config_with_defaults(config_data):
     updated = False
@@ -672,7 +694,6 @@ async def timeredit_error(ctx, error):
         # Log the error for debugging purposes
         #print(f"An error occurred during the !timeredit command: {error}")
         await ctx.send("An unexpected error occurred while editing the timer.")
-
 
 async def create_dkp_values_csv(guild):
     # Data for the initial CSV
@@ -1756,6 +1777,103 @@ async def generate_balances(ctx):
 
     # Send the file to the channel
     await ctx.send("Here is the current Balances Database:", file=csv_file)
+
+async def save_active_boss_timers(guild):
+    """Write the current in-memory active_boss_timers to #dkp-database as Active_Boss_Timers.csv."""
+    dkp_database_channel = discord.utils.get(guild.text_channels, name="dkp-database")
+    if dkp_database_channel is None:
+        print(f"[Timers] dkp-database not found in {guild.name}, cannot save active timers.")
+        return
+
+    # Build CSV rows
+    rows = [["Boss Name", "Timer End (epoch)", "Window End (epoch)", "Channel ID"]]
+    for boss_name, data in active_boss_timers.items():
+        rows.append([
+            boss_name,
+            str(data["timer_end"]),
+            str(data["window_end"]),
+            str(data.get("channel_id", "")),
+        ])
+
+    # Make CSV in memory
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerows(rows)
+    output.seek(0)
+
+    # If there is an old Active_Boss_Timers.csv, delete it so we don’t pile up messages
+    old_msg = await find_csv_message(dkp_database_channel, ACTIVE_TIMERS_FILENAME)
+    if old_msg is not None:
+        await old_msg.delete()
+
+    new_file = discord.File(
+        io.BytesIO(output.getvalue().encode()),
+        filename=ACTIVE_TIMERS_FILENAME
+    )
+    await dkp_database_channel.send(file=new_file)
+    print(f"[Timers] Saved {len(active_boss_timers)} active timers for {guild.name}.")
+
+async def load_active_boss_timers(guild):
+    """Read Active_Boss_Timers.csv from #dkp-database and recreate the running timer tasks."""
+    dkp_database_channel = discord.utils.get(guild.text_channels, name="dkp-database")
+    if dkp_database_channel is None:
+        print(f"[Timers] dkp-database not found in {guild.name}, cannot load active timers.")
+        return
+
+    msg = await find_csv_message(dkp_database_channel, ACTIVE_TIMERS_FILENAME)
+    if msg is None:
+        # nothing saved yet, nothing to load
+        return
+
+    csv_data = await download_csv(msg.attachments[0])
+    if csv_data is None or len(csv_data) <= 1:
+        return
+
+    now = time.time()
+
+    # rows: Boss Name, Timer End (epoch), Window End (epoch), Channel ID
+    for row in csv_data[1:]:
+        if len(row) < 3:
+            continue
+
+        boss_name = row[0].strip().lower()
+        try:
+            timer_end = float(row[1])
+            window_end = float(row[2])
+        except ValueError:
+            continue
+
+        # If the timer+window is already over, skip it
+        if now >= window_end:
+            continue
+
+        # Try to restore the channel we were using
+        channel = None
+        if len(row) >= 4 and row[3].strip():
+            ch_id = int(row[3].strip())
+            channel = guild.get_channel(ch_id)
+
+        # fallback: just use the #timers channel or any text channel
+        if channel is None:
+            channel = discord.utils.get(guild.text_channels, name="timers") or guild.text_channels[0]
+
+        # Put it back in memory
+        active_boss_timers[boss_name] = {
+            "timer_end": timer_end,
+            "window_end": window_end,
+            "channel_id": channel.id if channel else None,
+        }
+
+        # Recreate the background task so it will keep counting down
+        task = asyncio.create_task(
+            manage_boss_timers(guild, channel, boss_name, timer_end, window_end)
+        )
+        active_tasks[boss_name] = task
+
+    # After we rehydrated, refresh the #timers embed once
+    await update_timers_embed_if_active(guild)
+    print(f"[Timers] Restored {len(active_boss_timers)} timers for {guild.name}.")
+
 
 async def find_csv_message(channel, filename):
     # Fetch the message history from the channel
@@ -3293,6 +3411,8 @@ cancelled_timers = {}  # To track canceled timers
 # Dictionary to store tasks for active timers
 active_tasks = {}
 
+ACTIVE_TIMERS_FILENAME = "Active_Boss_Timers.csv"
+
 # Add a role mapping for boss types to role names
 role_mapping = {
     "dl": "dl",
@@ -3381,8 +3501,8 @@ async def cancel_timer_logic(boss_name, guild):
     # Cancel the running timer task if it exists
     if boss_name in active_tasks:
         task = active_tasks[boss_name]
-        task.cancel()  # Cancel the running task
-        await asyncio.sleep(0)  # Give time for the cancellation to propagate
+        task.cancel()
+        await asyncio.sleep(0)
 
     # Remove from active timers and tasks
     active_boss_timers.pop(boss_name, None)
@@ -3390,6 +3510,9 @@ async def cancel_timer_logic(boss_name, guild):
 
     # Update the timers embed
     await update_timers_embed_if_active(guild)
+
+    # >>> NEW: persist to CSV
+    await save_active_boss_timers(guild)
 
 @bot.command(name="cancel")
 async def cancel_timer(ctx, boss_name: str = None):
@@ -3563,8 +3686,12 @@ async def start_new_boss_timer(message, boss_name):
     timer_end = time.time() + timer_duration
     window_end = timer_end + window_duration
 
-    # Add the boss to the active timers
-    active_boss_timers[boss_name] = {"timer_end": timer_end, "window_end": window_end}
+    # Add the boss to the active timers (now with channel id)
+    active_boss_timers[boss_name] = {
+        "timer_end": timer_end,
+        "window_end": window_end,
+        "channel_id": message.channel.id,
+    }
 
     # Format the timer duration
     time_left_str = format_time_left(timer_duration)
@@ -3577,6 +3704,9 @@ async def start_new_boss_timer(message, boss_name):
     # Start the timer logic as a task and store it
     task = asyncio.create_task(manage_boss_timers(message.guild, message.channel, boss_name, timer_end, window_end))
     active_tasks[boss_name] = task
+
+    # >>> NEW: persist to CSV
+    await save_active_boss_timers(message.guild)
 
 async def get_boss_info_from_csv(guild, boss_name):
     # Fetch the DKP Database Channel
@@ -3700,6 +3830,8 @@ async def manage_boss_timers(guild, channel, boss_name, timer_end, window_end):
     active_tasks.pop(boss_name, None)
 
     await update_timers_embed_if_active(guild)
+
+    await save_active_boss_timers(guild)
 
 
 async def update_timers_embed_if_active(guild):
