@@ -105,6 +105,71 @@ DEFAULT_CONFIG = {
     "role_req_toggles": "true",
 }
 
+async def setup_guild(guild):
+    # Step 1: Ensure the required role exists
+    role = discord.utils.get(guild.roles, name="DKP Keeper")
+    if role is None:
+        print(f'Creating role "DKP Keeper" in {guild.name}')
+        role = await guild.create_role(name="DKP Keeper")
+
+    # Step 2: Ensure the required channels exist
+    log_channel = discord.utils.get(guild.text_channels, name="dkp-keeping-log")
+    if log_channel is None:
+        print(f'Creating channel "dkp-keeping-log" in {guild.name}')
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            role: discord.PermissionOverwrite(view_channel=True)
+        }
+        log_channel = await guild.create_text_channel('dkp-keeping-log', overwrites=overwrites)
+    else:
+        await log_channel.set_permissions(guild.default_role, view_channel=False)
+        await log_channel.set_permissions(role, view_channel=True)
+
+    db_channel = discord.utils.get(guild.text_channels, name="dkp-database")
+    if db_channel is None:
+        print(f'Creating channel "dkp-database" in {guild.name}')
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            role: discord.PermissionOverwrite(view_channel=True)
+        }
+        db_channel = await guild.create_text_channel('dkp-database', overwrites=overwrites)
+    else:
+        await db_channel.set_permissions(guild.default_role, view_channel=False)
+        await db_channel.set_permissions(role, view_channel=True)
+
+    # Step 3: Ensure CSVs exist (same list you already use)
+    for file_name, create_func in [
+        ("Boss_DKP_Values.csv", create_dkp_values_csv),
+        ("Balances_Database.csv", create_balances_csv),
+        ("Boss_Timers.csv", create_timers_csv),
+        ("config.csv", create_config_csv)
+    ]:
+        message = await find_csv_message(db_channel, file_name)
+        if message is None:
+            print(f'Creating {file_name} in {guild.name}')
+            await create_func(guild)
+        else:
+            # your existing config validation / decay restart
+            if file_name == "config.csv":
+                config_data = await download_csv(message.attachments[0])
+                if config_data is not None:
+                    updated_config = update_config_with_defaults(config_data)
+                    if updated_config:
+                        output = io.StringIO()
+                        writer = csv.writer(output)
+                        writer.writerows(config_data)
+                        output.seek(0)
+                        new_config_file = discord.File(io.BytesIO(output.getvalue().encode()), filename="config.csv")
+                        await db_channel.send(file=new_config_file)
+                        await message.delete()
+
+                    # re-start decay if toggle_decay is true
+                    for row in config_data:
+                        if row[0] == "toggle_decay" and row[1].lower() == "true":
+                            print(f"toggle_decay is set to true in {guild.name}. Restarting decay timer.")
+                            # make sure decay_timer is defined elsewhere like in your code
+                            await decay_timer(None, db_channel)
+                            break
 
 @bot.event
 async def on_ready():
@@ -180,6 +245,12 @@ async def on_ready():
                                 decay_active = True
                                 await decay_timer(None, db_channel)
                                 break
+
+@bot.event
+async def on_guild_join(guild):
+    # run the exact same setup for the new guild
+    print(f"Joined new guild: {guild.name}, running setup...")
+    await setup_guild(guild)
 
 # Dictionary to store boss names, timer durations (when the boss is dead), and window durations (when it can spawn)
 boss_timers = {
@@ -6264,4 +6335,4 @@ async def help_command(ctx, command: str = None):
             await interaction.response.edit_message(embed=embed, view=view)
 
 # Start the bot using your bot token
-bot.run('PUT YOUR BOT TOKEN HERE')
+bot.run('PUT BOT TOKEN HERE')
